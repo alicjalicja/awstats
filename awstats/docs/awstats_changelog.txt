@@ -1,6 +1,27 @@
 AWStats Changelog
 -----------------
-$Revision: 1.288 $ - $Author: eldy $ - $Date: 2010/08/18 10:49:50 $
+$Revision: 1.292 $ - $Author: eldy $ - $Date: 2012/12/13 00:25:31 $
+
+
+***** 7.1 *****
+
+New features/improvements:
+- Update translations.
+- Update browsers list.
+- Add example of nginx setup.
+- Add some patches from debian package.
+- Rename domain name into documentation to awstats.org
+- Can allow urls with awredir without using md5 key parameter.
+- Usage of databasebreak option possible with awstats_buildstaticpages.
+- Add rel=nofollow on links.
+- Add option AddLinkToExternalCGIWrapper to add link to a wrapper script
+  into each title of Dolibarr reports. This can be used to add a wrapper
+  to download data into a CSV file for example.
+
+Fixes:
+- Security fix into awredir.pl
+- Fix: Case of uk in googlechart api.
+- Fix: Compatibility with recent perl version.
 
 
 ***** 7.0 *****

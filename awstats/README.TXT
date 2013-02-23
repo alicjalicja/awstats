@@ -13,11 +13,11 @@ server log files (and even ftp servers or mail logs) on all Operating Systems.
 
 License: GNU GPL (GNU General Public License. See LICENSE file),
          OSI Certified Open Source Software license.
-Version: 7.0
-Release date: December 2010
+Version: 7.1
+Release date: December 2012
 Platforms: All (Linux, NT, BSD, Solaris and other *NIX's, BeOS, OS/2...)
 Author: Laurent Destailleur <eldy@users.sourceforge.net>
-AWStats official web site and latest version: http://awstats.sourceforge.net
+AWStats official web site and latest version: http://www.awstats.org
 
 I   - Features and requirements of AWStats
 	  I - 1) Features, what AWStats can show you
@@ -136,7 +136,7 @@ The documentation available for this release in HTML format is
 in the docs/ directory.
 
 You can find a most up-to-date documentation at:
-http://awstats.sourceforge.net
+http://www.awstats.org
 
 
 
@@ -149,7 +149,7 @@ Tests and results are available in AWStats documentation, in docs/ directory.
 
 IV - ABOUT THE AUTHOR, LICENSE AND SUPPORT
 -----------------------------------------
-Copyright (C) 2000-2010 - Laurent Destailleur - eldy@users.sourceforge.net
+Copyright (C) 2000-2011 - Laurent Destailleur - eldy@users.sourceforge.net
 
 This program is free software; you can redistribute it and/or
 modify it under the terms of the GNU General Public License
