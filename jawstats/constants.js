@@ -1,7 +1,7 @@
 /*
- * JAWStats 0.6 Web Statistics
+ * JAWStats 0.7 Web Statistics
  *
- * Copyright (c) 2008 Jon Combe (jawstats.com)
+ * Copyright (c) 2009 Jon Combe (jawstats.com)
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -27,10 +27,10 @@
 
 // JAWStats constants
 var g_iMajorVersion = 0;
-var g_iMinorVersion = 6;
+var g_iMinorVersion = 7;
 var oSubMenu = {};
-oSubMenu.AllMonths  = { "Monthly Breakdown"                      : "allmonths.all",
-                        "Yearly Breakdown"                       : "allmonths.year" };
+oSubMenu.AllMonths  = { "Visitors each Month"                    : "allmonths.all",
+                        "Visitors each Year"                     : "allmonths.year" };
 oSubMenu.Browser    = { "Browser Families"                       : "browser.family",
                         "All Browsers"                           : "browser.all" };
 oSubMenu.Country = {    "Countries"                              : "country.all",
@@ -42,13 +42,7 @@ oSubMenu.Country = {    "Countries"                              : "country.all"
                         "Oceania"                                : "country.Oceania",
                         "South America"                          : "country.South America",
                         "Other"                                  : "country.Other" };
-oSubMenu.Keyphrases = { "Top 10 Keyphrases"                      : "keyphrases.top10",
-                        "Keyphrases: 0.1% popularity and above"  : "keyphrases.point1",
-                        "All Keyphrases (slow)"                  : "keyphrases.all" };
-oSubMenu.Keywords   = { "Top 10 Keywords"                        : "keywords.top10",
-                        "Keywords: 0.1% popularity and above"    : "keywords.point1",
-                        "All Keywords (slow)"                    : "keywords.all" };
-oSubMenu.OS         = { "OS Families"                            : "os.family",
+oSubMenu.OS         = { "Operating System Families"              : "os.family",
                         "All Operating Systems"                  : "os.all" };
 oSubMenu.PageRefs   = { "Search Engines"                         : "pagerefs.se",
                         "Top 10 Referrers"                       : "pagerefs.top10",
@@ -59,6 +53,10 @@ oSubMenu.Pages      = { "Top Page Views"                         : "pages.topPag
                         "Top Bandwidth"                          : "pages.topBW",
                         "Top Entry Pages"                        : "pages.topEntry",
                         "Top Exit Pages"                         : "pages.topExit" };
+oSubMenu.Searches   = { "Keywords"                               : "searches.keywords",
+                        "Keyphrases"                             : "searches.keyphrases",
+                        "Keywords Tag Cloud"                     : "searches.keywordcloud",
+                        "Keyphrases Tag Cloud"                   : "searches.keyphrasecloud" };
 oSubMenu.Status     = { "Status Codes"                           : "status",
                         "File Not Found URLs"                    : "status.404" };
 oSubMenu.ThisMonth = {  "Overview"                               : "thismonth.all",

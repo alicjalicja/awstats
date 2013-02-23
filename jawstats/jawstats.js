@@ -1,7 +1,7 @@
 /*
- * JAWStats 0.6 Web Statistics
+ * JAWStats 0.7 Web Statistics
  *
- * Copyright (c) 2008 Jon Combe (jawstats.com)
+ * Copyright (c) 2009 Jon Combe (jawstats.com)
  *
  * Permission is hereby granted, free of charge, to any person
  * obtaining a copy of this software and associated documentation
@@ -25,8 +25,14 @@
  * OTHER DEALINGS IN THE SOFTWARE.
  */
 
+var oTranslation = {};
 var oStatistics = {};
 var dtLastUpdate = 0;
+var sToolID;
+var oPaging = {
+  oKeywords:{ iCurrPage:0, iRowCount:0, iRowsPerPage:15, sSort:"freqDESC" },
+  oKeyphrases:{ iCurrPage:0, iRowCount:0, iRowsPerPage:15, sSort:"freqDESC" }
+};
 
 // jQuery methods
 $(document).ready(function() {
@@ -35,15 +41,13 @@ $(document).ready(function() {
   $("#tab" + aCurrentView[0]).removeClass("off");
   DrawPage(g_sCurrentView);
 
-	$("#changemonth").click(function() {
-    $.blockUI(sChangeMonth);
-	});
-	$("#changesite").click(function() {
-    $.blockUI(sChangeSite);
-	});
-	$("#updatesite").click(function() {
-    $.blockUI("<table width='100%'><tbody><tr><td><h1 class='modal'>Please enter the password to update this site<\/h1><\/td><td onclick='$.unblockUI();' class='fauxlink right'>Cancel<\/td><\/tr><tr><td colspan='2' style='text-align: center;'><input type='password' class='text' id='password' onkeyup='UpdateSiteKeyUp(event)' /><input type='button' class='button' onclick='UpdateSite()' value='Update' /><\/td><\/tr><\/tbody><\/table>");
-	});
+  // change language mouseover
+  $("#toolLanguageButton").mouseover(function() {
+    $("#toolLanguageButton img").attr("src", "themes/" + sThemeDir + "/images/change_language_on.gif");
+  });
+  $("#toolLanguageButton").mouseout(function() {
+    $("#toolLanguageButton img").attr("src", "themes/" + sThemeDir + "/images/change_language.gif");
+  });
 });
 
 function AddLeadingZero(vValue, iLength) {
@@ -54,9 +58,19 @@ function AddLeadingZero(vValue, iLength) {
   return sValue;
 }
 
+function ChangeLanguage(sLanguage) {
+  $("#loading").show();
+  self.location.href = ("?config=" + g_sConfig + "&year=" + g_iYear + "&month=" + g_iMonth + "&view=" + g_sCurrentView + "&lang=" + sLanguage);
+}
+
 function ChangeMonth(iYear, iMonth) {
   $("#loading").show();
-  self.location.href = ("?config=" + g_sConfig + "&year=" + iYear + "&month=" + iMonth + "&view=" + g_sCurrentView);
+  self.location.href = ("?config=" + g_sConfig + "&year=" + iYear + "&month=" + iMonth + "&view=" + g_sCurrentView + "&lang=" + g_sLanguage);
+}
+
+function ChangeSite(sConfig) {
+  $("#loading").show();
+  self.location.href = ("?config=" + sConfig + "&year=" + g_iYear + "&month=" + g_iMonth + "&view=" + g_sCurrentView + "&lang=" + g_sLanguage);
 }
 
 function ChangeTab(oSpan, sPage) {
@@ -102,7 +116,7 @@ function DrawGraph_AllMonths() {
   var aItem = [];
   var aValue = [];
   for (var iIndex in oStatistics.oAllMonths.aData) {
-    aItem.push(gc_aMonthName[oStatistics.oAllMonths.aData[iIndex].dtDate.getMonth()].substr(0,3) + " '" +
+    aItem.push(Lang(gc_aMonthName[oStatistics.oAllMonths.aData[iIndex].dtDate.getMonth()].substr(0,3)) + " '" +
                (oStatistics.oAllMonths.aData[iIndex].dtDate.getFullYear()).toString().substr(2));
     aValue.push(oStatistics.oAllMonths.aData[iIndex].iVisits);
   }
@@ -118,9 +132,9 @@ function DrawGraph_ThisMonth() {
   var iDaysInMonth = (new Date(g_iYear, g_iMonth, 0)).getDate();
   var iDayOfWeek = (new Date(g_iYear, (g_iMonth - 1), 1)).getDay();
   for (var iDay = 0; iDay < iDaysInMonth; iDay++) {
-    aItem.push((iDay + 1) + DateSuffix(iDay + 1));
+    aItem.push(Lang((iDay + 1) + DateSuffix(iDay + 1)));
     aValue.push(0);
-    aInitial.push(gc_aDayName[iDayOfWeek].substr(0, 2));
+    aInitial.push(Lang(gc_aDayName[iDayOfWeek].substr(0, 3)));
 
     // day of week
     iDayOfWeek++;
@@ -235,6 +249,38 @@ function DrawPage(sPage) {
         }
         PageLayout_Robots();
         break;
+case "searches":
+  switch (aPage[1]) {
+    case "keyphrasecloud":
+      if (typeof oStatistics.oKeyphrases == "undefined") {
+    	  PopulateData_Keyphrases(sPage);
+    	  return false;
+      }
+      PageLayout_Searches(aPage[1]);
+      break;
+    case "keyphrases":
+      if (typeof oStatistics.oKeyphrases == "undefined") {
+    	  PopulateData_Keyphrases(sPage);
+    	  return false;
+      }
+      PageLayout_Searches(aPage[1]);
+      break;
+    case "keywordcloud":
+      if (typeof oStatistics.oKeywords == "undefined") {
+    	  PopulateData_Keywords(sPage);
+    	  return false;
+      }
+      PageLayout_Searches(aPage[1]);
+      break;
+    case "keywords":
+      if (typeof oStatistics.oKeywords == "undefined") {
+    	  PopulateData_Keywords(sPage);
+    	  return false;
+      }
+      PageLayout_Searches(aPage[1]);
+      break;
+  }
+  break;
       case "session":
         if (typeof oStatistics.oSession == "undefined") {
       	  PopulateData_Session();
@@ -278,8 +324,8 @@ function DrawPie(iTotal, aItem, aValue) {
   var oPie = new SWFObject("swf/pie.swf", "SWFpie", "100%", "100%", "8", "#ffffff");
   oPie.addParam("wmode", "transparent");
   oPie.addVariable("sTotal", iTotal);
-  oPie.addVariable("sItem", aItem.join(","));
-  oPie.addVariable("sValue", aValue.join(","));
+  oPie.addVariable("sItem", encodeURIComponent(aItem.join(",")));
+  oPie.addVariable("sValue", encodeURIComponent(aValue.join(",")));
   oPie.addVariable("sColor", g_sColor);
   oPie.addVariable("sShadowColor", g_sShadowColor);
   oPie.write("pie");
@@ -302,7 +348,7 @@ function DrawPie_Browser(sPage) {
         }
       }
       if (oStatistics.oBrowser.iTotalHits > iRunningTotal) {
-        aItem.push("Other Browsers");
+        aItem.push(Lang("Other Browsers"));
         aValue.push(oStatistics.oBrowser.iTotalHits - iRunningTotal);
       }
       DrawPie(oStatistics.oBrowser.iTotalHits, aItem, aValue);
@@ -319,7 +365,7 @@ function DrawPie_Browser(sPage) {
         }
       }
       if (oStatistics.oBrowser.iTotalHits > iRunningTotal) {
-        aItem.push("Other Browsers");
+        aItem.push(Lang("Other Browsers"));
         aValue.push(oStatistics.oBrowser.iTotalHits - iRunningTotal);
       }
       DrawPie(oStatistics.oBrowser.iTotalHits, aItem, aValue);
@@ -343,7 +389,7 @@ function DrawPie_Browser(sPage) {
         }
       }
       if (iFamilyTotalHits > iRunningTotal) {
-        aItem.push("Other Versions");
+        aItem.push(Lang("Other Versions"));
         aValue.push(iFamilyTotalHits - iRunningTotal);
       }
       DrawPie(iFamilyTotalHits, aItem, aValue);
@@ -368,7 +414,7 @@ function DrawPie_Country(sContinent) {
   for (var iIndex in aData) {
     if (iCount < 6) {
       if ((typeof sContinent == "undefined") || (aData[iIndex].sContinent == sContinent)) {
-        aItem.push(aData[iIndex].sCountryName);
+        aItem.push(Lang(aData[iIndex].sCountryName));
         aValue.push(aData[iIndex].iPages);
         iRunningTotal += aData[iIndex].iPages;
         iCount++;
@@ -376,7 +422,7 @@ function DrawPie_Country(sContinent) {
     }
   }
   if (iTotalPages > iRunningTotal) {
-    aItem.push("Other countries");
+    aItem.push(Lang("Other Countries"));
     aValue.push(iTotalPages - iRunningTotal);
   }
   DrawPie(iTotalPages, aItem, aValue);
@@ -398,12 +444,12 @@ function DrawPie_CountryContinent() {
   var aValue = [];
   var iRunningTotal = 0;
   for (var iIndex in aTemp) {
-    aItem.push(aTemp[iIndex].sContinent);
+    aItem.push(Lang(aTemp[iIndex].sContinent));
     aValue.push(aTemp[iIndex].iPages);
     iRunningTotal += aTemp[iIndex].iPages;
   }
   if (iTotalPages > iRunningTotal) {
-    aItem.push("Other");
+    aItem.push(Lang("Other"));
     aValue.push(iTotalPages - iRunningTotal);
   }
   DrawPie(iTotalPages, aItem, aValue);
@@ -418,9 +464,9 @@ function DrawPie_Filetypes() {
     if (iCount < 6) {
       if (oStatistics.oFiletypes.aData[iIndex].sFiletype != "&nbsp;") {
         aItem.push(oStatistics.oFiletypes.aData[iIndex].sFiletype.toUpperCase() + ": " +
-                   oStatistics.oFiletypes.aData[iIndex].sDescription);
+                   Lang(oStatistics.oFiletypes.aData[iIndex].sDescription));
       } else {
-        aItem.push(oStatistics.oFiletypes.aData[iIndex].sDescription);
+        aItem.push(Lang(oStatistics.oFiletypes.aData[iIndex].sDescription));
       }
       aValue.push(oStatistics.oFiletypes.aData[iIndex].iHits);
       iRunningTotal += oStatistics.oFiletypes.aData[iIndex].iHits;
@@ -428,7 +474,7 @@ function DrawPie_Filetypes() {
     iCount++;
   }
   if (oStatistics.oFiletypes.iTotalHits > iRunningTotal) {
-    aItem.push("Other filetypes");
+    aItem.push(Lang("Other Filetypes"));
     aValue.push(oStatistics.oFiletypes.iTotalHits - iRunningTotal);
   }
   DrawPie(oStatistics.oFiletypes.iTotalHits, aItem, aValue);
@@ -448,7 +494,7 @@ function DrawPie_Keyphrases() {
     iCount++;
   }
   if (oStatistics.oKeyphrases.iTotalFreq > iRunningTotal) {
-    aItem.push("Other keyphrases");
+    aItem.push(Lang("Other Keyphrases"));
     aValue.push(oStatistics.oKeyphrases.iTotalFreq - iRunningTotal);
   }
   DrawPie(oStatistics.oKeyphrases.iTotalFreq, aItem, aValue);
@@ -468,7 +514,7 @@ function DrawPie_Keywords() {
     iCount++;
   }
   if (oStatistics.oKeywords.iTotalFreq > iRunningTotal) {
-    aItem.push("Other keywords");
+    aItem.push(Lang("Other Keywords"));
     aValue.push(oStatistics.oKeywords.iTotalFreq - iRunningTotal);
   }
   DrawPie(oStatistics.oKeywords.iTotalFreq, aItem, aValue);
@@ -491,7 +537,7 @@ function DrawPie_OperatingSystems(sPage) {
         }
       }
       if (oStatistics.oOperatingSystems.iTotalHits > iRunningTotal) {
-        aItem.push("Other OS");
+        aItem.push(Lang("Other Operating Systems"));
         aValue.push(oStatistics.oOperatingSystems.iTotalHits - iRunningTotal);
       }
       DrawPie(oStatistics.oOperatingSystems.iTotalHits, aItem, aValue);
@@ -508,7 +554,7 @@ function DrawPie_OperatingSystems(sPage) {
         }
       }
       if (oStatistics.oOperatingSystems.iTotalHits > iRunningTotal) {
-        aItem.push("Other OS");
+        aItem.push(Lang("Other Operating Systems"));
         aValue.push(oStatistics.oOperatingSystems.iTotalHits - iRunningTotal);
       }
       DrawPie(oStatistics.oOperatingSystems.iTotalHits, aItem, aValue);
@@ -532,7 +578,7 @@ function DrawPie_OperatingSystems(sPage) {
         }
       }
       if (iFamilyTotalHits > iRunningTotal) {
-        aItem.push("Other Versions");
+        aItem.push(Lang("Other Versions"));
         aValue.push(iFamilyTotalHits - iRunningTotal);
       }
       DrawPie(iFamilyTotalHits, aItem, aValue);
@@ -552,26 +598,25 @@ function DrawPie_PageRefs(sPage) {
     case "top10":
     case "top50":
       var aData = oStatistics.oPageRefs.aData;
+      var sVarName = "sURL";
       break;
     case "domains":
       var aData = oStatistics.oPageRefs.aDataDomain;
-      break;
-    case "tld":
-      var aData = oStatistics.oPageRefs.aDataTLD;
+      var sVarName = "sVisibleURL";
       break;
   }
 
   // loop through data
   for (var iIndex in aData) {
     if (iCount < 6) {
-      aItem.push(aData[iIndex].sURL);
+      aItem.push(aData[iIndex][sVarName]);
       aValue.push(aData[iIndex].iPages);
       iRunningTotal += aData[iIndex].iPages;
     }
     iCount++;
   }
   if (oStatistics.oPageRefs.iTotalPages > iRunningTotal) {
-    aItem.push("Other referrers");
+    aItem.push(Lang("Other Referrers"));
     aValue.push(oStatistics.oPageRefs.iTotalPages - iRunningTotal);
   }
   DrawPie(oStatistics.oPageRefs.iTotalPages, aItem, aValue);
@@ -594,7 +639,7 @@ function DrawPie_PageRefsSE(sPage) {
     iCount++;
   }
   if (oStatistics.oPageRefsSE.iTotalPages > iRunningTotal) {
-    aItem.push("Other Search Engines");
+    aItem.push(Lang("Other Search Engines"));
     aValue.push(oStatistics.oPageRefsSE.iTotalPages - iRunningTotal);
   }
   DrawPie(oStatistics.oPageRefsSE.iTotalPages, aItem, aValue);
@@ -614,7 +659,7 @@ function DrawPie_Pages(aData, iTotal, sItemName) {
     iCount++;
   }
   if (iTotal > iRunningTotal) {
-    aItem.push("Other URLs");
+    aItem.push(Lang("Other URLs"));
     aValue.push(iTotal - iRunningTotal);
   }
   DrawPie(iTotal, aItem, aValue);
@@ -634,14 +679,14 @@ function DrawPie_Robots() {
     iCount++;
   }
   if (oStatistics.oRobots.iTotalHits > iRunningTotal) {
-    aItem.push("Other spiders");
+    aItem.push(Lang("Other Spiders"));
     aValue.push(oStatistics.oRobots.iTotalHits - iRunningTotal);
   }
   DrawPie(oStatistics.oRobots.iTotalHits, aItem, aValue);
 }
 
 function DrawPie_Session() {
-  var aItem = ["0sec - 30sec", "30sec - 2min", "2min - 5min", "5min - 15min", "15min - 30min", "30min - 1hour", "Above 1 hour"];
+  var aItem = [Lang("0 seconds - 30 seconds"), Lang("30 seconds - 2 minutes"), Lang("2 minutes - 5 minutes"), Lang("5 minutes - 15 minutes"), Lang("15 minutes - 30 minutes"), Lang("30 minutes - 1 hour"), Lang("More than 1 hour")];
   var aValue = [oStatistics.oSession.aData.s0s30s,
                 oStatistics.oSession.aData.s30s2mn,
                 oStatistics.oSession.aData.s2mn5mn,
@@ -661,7 +706,7 @@ function DrawPie_Status() {
     if (iCount < 6) {
       if (oStatistics.oStatus.aData[iIndex].sDescription != "&nbsp;") {
         aItem.push(oStatistics.oStatus.aData[iIndex].sCode + ": " +
-                   oStatistics.oStatus.aData[iIndex].sDescription);
+                   Lang(oStatistics.oStatus.aData[iIndex].sDescription));
       } else {
         aItem.push(oStatistics.oStatus.aData[iIndex].sCode);
       }
@@ -671,7 +716,7 @@ function DrawPie_Status() {
     iCount++;
   }
   if (oStatistics.oStatus.iTotalHits > iRunningTotal) {
-    aItem.push("Other status codes");
+    aItem.push(Lang("Other Status Codes"));
     aValue.push(oStatistics.oStatus.iTotalHits - iRunningTotal);
   }
   DrawPie(oStatistics.oStatus.iTotalHits, aItem, aValue);
@@ -724,6 +769,9 @@ function DrawSubMenu(sMenu, sSelected) {
     case "pages":
       oMenu = oSubMenu["Pages"];
       break;
+    case "searches":
+      oMenu = oSubMenu["Searches"];
+      break;
     case "status":
       oMenu = oSubMenu["Status"];
       break;
@@ -738,28 +786,32 @@ function DrawSubMenu(sMenu, sSelected) {
   var aMenu = [];
   for (sLabel in oMenu) {
     if (sSelected == sLabel) {
-      aMenu.push("<span class=\"submenuselect\" onclick=\"DrawPage('" + oMenu[sLabel] + "')\">" + sLabel + "</span>");
+      aMenu.push("<span class=\"submenuselect\" onclick=\"DrawPage('" + oMenu[sLabel] + "')\">" + Lang(sLabel) + "</span>");
     } else {
-      aMenu.push("<span class=\"submenu\" onclick=\"DrawPage('" + oMenu[sLabel] + "')\">" + sLabel + "</span>");
+      aMenu.push("<span class=\"submenu\" onclick=\"DrawPage('" + oMenu[sLabel] + "')\">" + Lang(sLabel) + "</span>");
     }
   }
-  return ("<div id=\"submenu\">Sub-Categories: " + aMenu.join(" | ") + "</div>");
+  return ("<div id=\"submenu\">" + aMenu.join(" | ") + "</div>");
 }
 
 function DrawTable_AllMonths(sPage) {
   // create header
   var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
-              "<thead><tr>" +
-              "<th width=\"16%\">Month</th>" +
-              "<th width=\"12%\">Total&nbsp;Visitors</th>" +
-              "<th width=\"12%\">Visitors&nbsp;per&nbsp;Day</th>" +
-              "<th width=\"12%\">Unique&nbsp;Visitors</th>" +
-              "<th width=\"12%\">Unique&nbsp;Ratio</th>" +
-              "<th width=\"12%\">Pages</th>" +
-              "<th width=\"12%\">Hits</th>" +
-              "<th width=\"12%\" class=\"noborder\">BW</th>" +
-              "</tr></thead>\n" +
-              "<tbody>";
+              "<thead><tr>";
+  if (sPage == "all") {
+    sHTML += "<th width=\"16%\">" + Lang("Month") + "</th>";
+  } else {
+    sHTML += "<th width=\"16%\">" + Lang("Year") + "</th>";
+  }
+  sHTML += "<th width=\"12%\">" + Lang("Total Visitors") + "</th>" +
+           "<th width=\"12%\">" + Lang("Visitors per Day") + "</th>" +
+           "<th width=\"12%\">" + Lang("Unique Visitors") + "</th>" +
+           "<th width=\"12%\">" + Lang("Unique Ratio") + "</th>" +
+           "<th width=\"12%\">" + Lang("Pages") + "</th>" +
+           "<th width=\"12%\">" + Lang("Hits") + "</th>" +
+           "<th width=\"12%\" class=\"noborder\">" + Lang("BW") + "</th>" +
+           "</tr></thead>\n" +
+           "<tbody>";
 
   // create table body
   aHTML = new Array();
@@ -807,7 +859,7 @@ function DrawTable_AllMonths(sPage) {
         } else {
           var sHTMLRow = "<tr>";
         }
-        sHTMLRow += "<td><span class=\"hidden\">" + oRow.dtDate.valueOf() + "</span>" + gc_aMonthName[oRow.iMonth - 1] + " " + oRow.iYear + "</td>" +
+        sHTMLRow += "<td><span class=\"hidden\">" + oRow.dtDate.valueOf() + "</span>" + Lang(gc_aMonthName[oRow.iMonth - 1]) + " " + oRow.iYear + "</td>" +
                     "<td class=\"right\">" + NumberFormat(iVisits, 0) + "</td>" +
                     "<td class=\"right\">" + NumberFormat((iVisits / iDaysInMonth), 1) + "</td>" +
                     "<td class=\"right\">" + NumberFormat(iUniques) + "</td>";
@@ -866,7 +918,7 @@ function DrawTable_AllMonths(sPage) {
              "</tr></tfoot></table>")
     return ( [ true, sHTML ] );
   } else {
-    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"7\">There is no data to display</td></tr></tbody></table>") ] );
+    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"7\">" + Lang("There is no data to display") + "</td></tr></tbody></table>") ] );
   }
 }
 
@@ -884,8 +936,8 @@ function DrawTable_Browser(sPage) {
       var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
                   "<thead><tr>" +
                   "<th width=\"1\">&nbsp;</th>" +
-                  "<th>Browser</th>" +
-                  "<th>Hits</th>" +
+                  "<th>" + Lang("Browser") + "</th>" +
+                  "<th>" + Lang("Hits") + "</th>" +
     				      "<th class=\"noborder\">&nbsp;</th>" +
                   "</tr></thead>\n" +
                   "<tbody>";
@@ -906,8 +958,8 @@ function DrawTable_Browser(sPage) {
       var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
                   "<thead><tr>" +
                   "<th width=\"1\">&nbsp;</th>" +
-                  "<th>Browser Family</th>" +
-                  "<th>Hits</th>" +
+                  "<th>" + Lang("Browser Family") + "</th>" +
+                  "<th>" + Lang("Hits") + "</th>" +
     				      "<th class=\"noborder\">&nbsp;</th>" +
                   "</tr></thead>\n" +
                   "<tbody>";
@@ -931,10 +983,10 @@ function DrawTable_Browser(sPage) {
       var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
                   "<thead><tr>" +
                   "<th width=\"1\">&nbsp;</th>" +
-                  "<th>Browser</th>" +
-                  "<th>Hits</th>" +
-    				      "<th class=\"noborder\" width=\"1\">%&nbsp;within&nbsp;Family</th>" +
-    				      "<th class=\"noborder\" width=\"1\">%&nbsp;Overall</th>" +
+                  "<th>" + Lang("Browser") + "</th>" +
+                  "<th>" + Lang("Hits") + "</th>" +
+    				      "<th class=\"noborder\" width=\"1\">%&nbsp;" + Lang("within Family") + "</th>" +
+    				      "<th class=\"noborder\" width=\"1\">%&nbsp;" + Lang("Overall") + "</th>" +
                   "</tr></thead>\n" +
                   "<tbody>";
 
@@ -966,7 +1018,7 @@ function DrawTable_Browser(sPage) {
   if (aHTML.length > 0) {
     return ( [ true, (sHTML + aHTML.join("\n") + "</tbody></table>") ] );
   } else {
-    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"4\">There is no data to display</td></tr></tbody></table>") ] );
+    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"4\">" + Lang("There is no data to display") + "</td></tr></tbody></table>") ] );
   }
 }
 
@@ -987,12 +1039,12 @@ function DrawTable_Country(sContinent) {
   var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
               "<thead><tr>" +
 		          "<th>&nbsp;</th>" +
-              "<th>Country</th>" +
-              "<th>Pages</th>" +
+              "<th>" + Lang("Country") + "</th>" +
+              "<th>" + Lang("Pages") + "</th>" +
               "<th>%</th>" +
-              "<th>Hits</th>" +
+              "<th>" + Lang("Hits") + "</th>" +
               "<th>%</th>" +
-		          "<th>Bandwidth</th>" +
+		          "<th>" + Lang("Bandwidth") + "</th>" +
 		          "<th class=\"noborder\">%</th>" +
               "</tr></thead>\n" +
               "<tbody>";
@@ -1006,7 +1058,7 @@ function DrawTable_Country(sContinent) {
     if ((typeof sContinent == "undefined") || (aData[iRow].sContinent == sContinent)) {
       aHTML.push("<tr>" +
                  "<td class=\"countryflag\"><img src=\"themes/" + sThemeDir + "/flags/" + aData[iRow].sCountryCode + ".gif\" alt=\"" + aData[iRow].sCountryName + "\" /></td>" +
-                 "<td>" + aData[iRow].sCountryName + "</td>" +
+                 "<td>" + Lang(aData[iRow].sCountryName) + "</td>" +
                  "<td class=\"noborder right\">" + NumberFormat(aData[iRow].iPages, 0) + "</td>" +
                  "<td class=\"right\">" + (SafeDivide(aData[iRow].iPages, iTotalPages) * 100).toFixed(1) + "%</td>" +
                  "<td class=\"noborder right\">" + NumberFormat(aData[iRow].iHits, 0) + "</td>" +
@@ -1021,7 +1073,7 @@ function DrawTable_Country(sContinent) {
   if (aHTML.length > 0) {
     return ( [ true, (sHTML + aHTML.join("\n") + "</tbody></table>") ] );
   } else {
-    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"8\">There is no data to display</td></tr></tbody></table>") ] );
+    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"8\">" + Lang("There is no data to display") + "</td></tr></tbody></table>") ] );
   }
 }
 
@@ -1037,12 +1089,12 @@ function DrawTable_CountryContinent() {
   // create header
   var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
               "<thead><tr>" +
-              "<th>Continent</th>" +
-              "<th>Pages</th>" +
+              "<th>" + Lang("Continent") + "</th>" +
+              "<th>" + Lang("Pages") + "</th>" +
               "<th>%</th>" +
-              "<th>Hits</th>" +
+              "<th>" + Lang("Hits") + "</th>" +
               "<th>%</th>" +
-		          "<th>Bandwidth</th>" +
+		          "<th>" + Lang("Bandwidth") + "</th>" +
 		          "<th class=\"noborder\">%</th>" +
               "</tr></thead>\n" +
               "<tbody>";
@@ -1055,7 +1107,7 @@ function DrawTable_CountryContinent() {
     iOtherHits  -= oC.iTotalHits;
     iOtherBW    -= oC.iTotalBW;
     aHTML.push("<tr>" +
-               "<td>" + sContinent + " &nbsp;<span class=\"fauxlink tiny\" onclick=\"DrawPage('country." + sContinent + "');\">&raquo;</span></td>" +
+               "<td>" + Lang(sContinent) + " &nbsp;<span class=\"fauxlink tiny\" onclick=\"DrawPage('country." + sContinent + "');\">&raquo;</span></td>" +
                "<td class=\"right\">" + NumberFormat(oC.iTotalPages, 0) + "</td>" +
                "<td class=\"right\">" + ((oC.iTotalPages / iTotalPages) * 100).toFixed(1) + "%</td>" +
                "<td class=\"right\">" + NumberFormat(oC.iTotalHits, 0) + "</td>" +
@@ -1067,7 +1119,7 @@ function DrawTable_CountryContinent() {
 
   // add "other" row
   aHTML.push("<tr>" +
-             "<td>Other &nbsp;<span class=\"fauxlink tiny\" onclick=\"DrawPage('country.Other');\">&raquo;</span></td>" +
+             "<td>" + Lang("Other") + "&nbsp;<span class=\"fauxlink tiny\" onclick=\"DrawPage('country.Other');\">&raquo;</span></td>" +
              "<td class=\"right\">" + NumberFormat(iOtherPages, 0) + "</td>" +
              "<td class=\"right\">" + ((iOtherPages / iTotalPages) * 100).toFixed(1) + "%</td>" +
              "<td class=\"right\">" + NumberFormat(iOtherHits, 0) + "</td>" +
@@ -1091,13 +1143,13 @@ function DrawTable_Filetypes() {
   // create header
   var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
               "<thead><tr>" +
-              "<th>Filetype</th>" +
-              "<th>Description</th>" +
-              "<th>Hits</th>" +
+              "<th>" + Lang("Filetype") + "</th>" +
+              "<th>" + Lang("Description") + "</th>" +
+              "<th>" + Lang("Hits") + "</th>" +
               "<th>&nbsp;</th>" +
-		          "<th>Bandwidth</th>" +
+		          "<th>" + Lang("Bandwidth") + "</th>" +
 		          "<th>&nbsp;</th>" +
-		          "<th class=\"noborder\">Avg&nbsp;Size</th>" +
+		          "<th class=\"noborder\">" + Lang("Average Size") + "</th>" +
               "</tr></thead>\n" +
               "<tbody>";
 
@@ -1106,7 +1158,7 @@ function DrawTable_Filetypes() {
   for (var iRow in aData) {
     aHTML.push("<tr>" +
                "<td>" + oStatistics.oFiletypes.aData[iRow].sFiletype + "</td>" +
-               "<td>" + oStatistics.oFiletypes.aData[iRow].sDescription + "</td>" +
+               "<td>" + Lang(oStatistics.oFiletypes.aData[iRow].sDescription) + "</td>" +
                "<td class=\"right\">" + NumberFormat(oStatistics.oFiletypes.aData[iRow].iHits, 0) + "</td>" +
                "<td class=\"right\">" + ((oStatistics.oFiletypes.aData[iRow].iHits / iTotalHits) * 100).toFixed(1) + "%</td>" +
                "<td class=\"right\">" + DisplayBandwidth(oStatistics.oFiletypes.aData[iRow].iBW) + "</td>" +
@@ -1119,85 +1171,7 @@ function DrawTable_Filetypes() {
   if (aHTML.length > 0) {
     return ( [ true, (sHTML + aHTML.join("\n") + "</tbody></table>") ] );
   } else {
-    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"7\">There is no data to display</td></tr></tbody></table>") ] );
-  }
-}
-
-function DrawTable_Keyphrases(sPage) {
-  // get values
-  iTotalFreq      = oStatistics.oKeyphrases.iTotalFreq;
-  aData           = oStatistics.oKeyphrases.aData;
-
-  // create header
-  var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
-              "<thead><tr>" +
-              "<th>Phrase</th>" +
-              "<th>Frequency</th>" +
-				      "<th class=\"noborder\">&nbsp;</th>" +
-              "</tr></thead>\n" +
-              "<tbody>";
-
-  // create table body
-  aHTML = new Array();
-  for (var iRow in aData) {
-    iPercent = ((aData[iRow].iFreq / iTotalFreq) * 100);
-    if ((iPercent < 0.05) && (sPage == "point1")) {
-      break;
-    }
-    aHTML.push("<tr>" +
-               "<td>" + aData[iRow].sPhrase + "</td>" +
-               "<td class=\"right\">" + NumberFormat(aData[iRow].iFreq, 0) + "</td>" +
-			         "<td class=\"noborder right\">" + iPercent.toFixed(1) + "%</td>" +
-               "</tr>\n");
-    if ((sPage == "top10") && (iRow == 9)) {
-      break;
-    }
-  }
-
-  // output
-  if (aHTML.length > 0) {
-    return ( [ true, (sHTML + aHTML.join("\n") + "</tbody></table>") ] );
-  } else {
-    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"3\">There is no data to display</td></tr></tbody></table>") ] );
-  }
-}
-
-function DrawTable_Keywords(sPage) {
-  // get values
-  iTotalFreq      = oStatistics.oKeywords.iTotalFreq;
-  aData           = oStatistics.oKeywords.aData;
-
-  // create header
-  var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
-              "<thead><tr>" +
-              "<th>Word</th>" +
-              "<th>Frequency</th>" +
-				      "<th class=\"noborder\">&nbsp;</th>" +
-              "</tr></thead>\n" +
-              "<tbody>";
-
-  // create table body
-  aHTML = new Array();
-  for (var iRow in aData) {
-    iPercent = ((aData[iRow].iFreq / iTotalFreq) * 100);
-    if ((iPercent < 0.05) && (sPage == "point1")) {
-      break;
-    }
-    aHTML.push("<tr>" +
-               "<td>" + aData[iRow].sWord + "</td>" +
-               "<td class=\"right\">" + NumberFormat(aData[iRow].iFreq, 0) + "</td>" +
-			         "<td class=\"noborder right\">" + iPercent.toFixed(1) + "%</td>" +
-               "</tr>\n");
-    if ((sPage == "top10") && (iRow == 9)) {
-      break;
-    }
-  }
-
-  // output
-  if (aHTML.length > 0) {
-    return ( [ true, (sHTML + aHTML.join("\n") + "</tbody></table>") ] );
-  } else {
-    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"3\">There is no data to display</td></tr></tbody></table>") ] );
+    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"7\">" + Lang("There is no data to display") + "</td></tr></tbody></table>") ] );
   }
 }
 
@@ -1215,8 +1189,8 @@ function DrawTable_OperatingSystems(sPage) {
       var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
                   "<thead><tr>" +
                   "<th width=\"1\">&nbsp;</th>" +
-                  "<th>Operating System</th>" +
-                  "<th>Hits</th>" +
+                  "<th>" + Lang("Operating System") + "</th>" +
+                  "<th>" + Lang("Hits") + "</th>" +
     				      "<th class=\"noborder\">&nbsp;</th>" +
                   "</tr></thead>\n" +
                   "<tbody>";
@@ -1237,8 +1211,8 @@ function DrawTable_OperatingSystems(sPage) {
       var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
                   "<thead><tr>" +
                   "<th width=\"1\">&nbsp;</th>" +
-                  "<th>Operating System Family</th>" +
-                  "<th>Hits</th>" +
+                  "<th>" + Lang("Operating System Family") + "</th>" +
+                  "<th>" + Lang("Hits") + "</th>" +
     				      "<th class=\"noborder\">&nbsp;</th>" +
                   "</tr></thead>\n" +
                   "<tbody>";
@@ -1262,10 +1236,10 @@ function DrawTable_OperatingSystems(sPage) {
       var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
                   "<thead><tr>" +
                   "<th width=\"1\">&nbsp;</th>" +
-                  "<th>Operating System</th>" +
-                  "<th>Hits</th>" +
-    				      "<th class=\"noborder\" width=\"1\">%&nbsp;within&nbsp;Family</th>" +
-    				      "<th class=\"noborder\" width=\"1\">%&nbsp;Overall</th>" +
+                  "<th>" + Lang("Operating System") + "</th>" +
+                  "<th>" + Lang("Hits") + "</th>" +
+    				      "<th class=\"noborder\" width=\"1\">%&nbsp;" + (Lang("within Family")).replace(" ", "&nbsp;") + "</th>" +
+    				      "<th class=\"noborder\" width=\"1\">%&nbsp;" + Lang("Overall") + "</th>" +
                   "</tr></thead>\n" +
                   "<tbody>";
 
@@ -1297,7 +1271,7 @@ function DrawTable_OperatingSystems(sPage) {
   if (aHTML.length > 0) {
     return ( [ true, (sHTML + aHTML.join("\n") + "</tbody></table>") ] );
   } else {
-    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"3\">There is no data to display</td></tr></tbody></table>") ] );
+    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"3\">" + Lang("There is no data to display") + "</td></tr></tbody></table>") ] );
   }
 }
 
@@ -1317,10 +1291,10 @@ function DrawTable_PageRefs(sPage) {
   // create header
   var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
               "<thead><tr>" +
-              "<th>Referrer</th>" +
-              "<th>Pages</th>" +
+              "<th>" + Lang("Referrer") + "</th>" +
+              "<th>" + Lang("Pages") + "</th>" +
               "<th>&nbsp;</th>" +
-		          "<th>Hits</th>" +
+		          "<th>" + Lang("Hits") + "</th>" +
 				      "<th class=\"noborder\">&nbsp;</th>" +
               "</tr></thead>\n" +
               "<tbody>";
@@ -1335,7 +1309,7 @@ function DrawTable_PageRefs(sPage) {
         sReferrer = "<a href=\"" + aData[iRow].sURL + "\" target=\"_blank\">" + aData[iRow].sVisibleURL + "</a>";
         break;
       case "domains":
-        sReferrer = "<a href=\"" + aData[iRow].sURL + "\" target=\"_blank\">" + aData[iRow].sURL + "</a>";
+        sReferrer = "<a href=\"" + aData[iRow].sURL + "\" target=\"_blank\">" + aData[iRow].sVisibleURL + "</a>";
         break;
       default:
         sReferrer = aData[iRow].sURL;
@@ -1359,7 +1333,7 @@ function DrawTable_PageRefs(sPage) {
   if (aHTML.length > 0) {
     return ( [ true, (sHTML + aHTML.join("\n") + "</tbody></table>") ] );
   } else {
-    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"5\">There is no data to display</td></tr></tbody></table>") ] );
+    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"5\">" + Lang("There is no data to display") + "</td></tr></tbody></table>") ] );
   }
 }
 
@@ -1373,10 +1347,10 @@ function DrawTable_PageRefsSE(sPage) {
   var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
               "<thead><tr>" +
               "<th width=\"1\">&nbsp;</th>" +
-              "<th>Search Engine</th>" +
-              "<th>Pages</th>" +
+              "<th>" + Lang("Search Engine") + "</th>" +
+              "<th>" + Lang("Pages") + "</th>" +
               "<th>&nbsp;</th>" +
-		          "<th>Hits</th>" +
+		          "<th>" + Lang("Hits") + "</th>" +
 				      "<th class=\"noborder\">&nbsp;</th>" +
               "</tr></thead>\n" +
               "<tbody>";
@@ -1398,7 +1372,7 @@ function DrawTable_PageRefsSE(sPage) {
   if (aHTML.length > 0) {
     return ( [ true, (sHTML + aHTML.join("\n") + "</tbody></table>") ] );
   } else {
-    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"6\">There is no data to display</td></tr></tbody></table>") ] );
+    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"6\">" + Lang("There is no data to display") + "</td></tr></tbody></table>") ] );
   }
 }
 
@@ -1412,14 +1386,14 @@ function DrawTable_Pages(aData) {
   // create header
   var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
               "<thead><tr>" +
-              "<th>URL</th>" +
-              "<th>Pages</th>" +
+              "<th>" + Lang("URL") + "</th>" +
+              "<th>" + Lang("Pages") + "</th>" +
               "<th>&nbsp;</th>" +
-		          "<th>Bandwidth</th>" +
+		          "<th>" + Lang("Bandwidth") + "</th>" +
 		          "<th>&nbsp;</th>" +
-		          "<th>Entry</th>" +
+		          "<th>" + Lang("Entry") + "</th>" +
 		          "<th>&nbsp;</th>" +
-				      "<th>Exit</th>" +
+				      "<th>" + Lang("Exit") + "</th>" +
 				      "<th class=\"noborder\">&nbsp;</th>" +
               "</tr></thead>\n" +
               "<tbody>";
@@ -1444,7 +1418,7 @@ function DrawTable_Pages(aData) {
   if (aHTML.length > 0) {
     return ( [ true, (sHTML + aHTML.join("\n") + "</tbody></table>") ] );
   } else {
-    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"9\">There is no data to display</td></tr></tbody></table>") ] );
+    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"9\">" + Lang("There is no data to display") + "</td></tr></tbody></table>") ] );
   }
 }
 
@@ -1458,12 +1432,12 @@ function DrawTable_Robots() {
   // create header
   var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
               "<thead><tr>" +
-              "<th>Spider</th>" +
-              "<th>Hits</th>" +
+              "<th>" + Lang("Spider") + "</th>" +
+              "<th>" + Lang("Hits") + "</th>" +
               "<th>&nbsp;</th>" +
-		          "<th>Bandwidth</th>" +
+		          "<th>" + Lang("Bandwidth") + "</th>" +
 		          "<th>&nbsp;</th>" +
-		          "<th>Last Visit</th>" +
+		          "<th>" + Lang("Last Visit") + "</th>" +
 				      "<th>Robots.txt</th>" +
 				      "<th class=\"noborder\">&nbsp;</th>" +
               "</tr></thead>\n" +
@@ -1485,7 +1459,7 @@ function DrawTable_Robots() {
                "<td class=\"right\">" + ((oStatistics.oRobots.aData[iRow].iHits / iTotalHits) * 100).toFixed(1) + "%</td>" +
                "<td class=\"right\">" + DisplayBandwidth(oStatistics.oRobots.aData[iRow].iBW) + "</td>" +
                "<td class=\"right\">" + ((oStatistics.oRobots.aData[iRow].iBW / iTotalBW) * 100).toFixed(1) + "%</td>" +
-               "<td class=\"right\"><span class=\"hidden\">" + sDate + "</span>" + dtDate.getDate() + " " + gc_aMonthName[dtDate.getMonth()].substr(0,3) + " '" + dtDate.getFullYear().toString().substr(2) + " " + AddLeadingZero(dtDate.getHours(), 2) + ":" + AddLeadingZero(dtDate.getMinutes(), 2) + "</td>" +
+               "<td class=\"right\"><span class=\"hidden\">" + sDate + "</span>" + dtDate.getDate() + " " + Lang(gc_aMonthName[dtDate.getMonth()].substr(0,3)) + " '" + dtDate.getFullYear().toString().substr(2) + " " + AddLeadingZero(dtDate.getHours(), 2) + ":" + AddLeadingZero(dtDate.getMinutes(), 2) + "</td>" +
                "<td class=\"right\">" + NumberFormat(oStatistics.oRobots.aData[iRow].iRobotsTXT, 0) + "</td>" +
 			         "<td class=\"noborder right\">" + (SafeDivide(oStatistics.oRobots.aData[iRow].iRobotsTXT, iTotalRobotsTXT) * 100).toFixed(1) + "%</td>" +
                "</tr>\n");
@@ -1495,7 +1469,7 @@ function DrawTable_Robots() {
   if (aHTML.length > 0) {
     return ( [ true, (sHTML + aHTML.join("\n") + "</tbody></table>") ] );
   } else {
-    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"8\">There is no data to display</td></tr></tbody></table>") ] );
+    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"8\">" + Lang("There is no data to display") + "</td></tr></tbody></table>") ] );
   }
 }
 
@@ -1507,8 +1481,8 @@ function DrawTable_Session() {
   // create header
   var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
               "<thead><tr>" +
-              "<th>Session Length</th>" +
-              "<th>Freq</th>" +
+              "<th>" + Lang("Session Length") + "</th>" +
+              "<th>" + Lang("Frequency") + "</th>" +
 				      "<th class=\"noborder\">&nbsp;</th>" +
               "</tr></thead>\n" +
               "<tbody>";
@@ -1516,37 +1490,37 @@ function DrawTable_Session() {
   // create table body
   aHTML = new Array();
   aHTML.push("<tr>" +
-             "<td>0 seconds - 30 seconds</td>" +
+             "<td><!-- 7 -->" + Lang("0 seconds - 30 seconds") + "</td>" +
              "<td>" + NumberFormat(aData.s0s30s, 0) + "</td>" +
              "<td>" + NumberFormat(SafeDivide(aData.s0s30s, iTotalFreq) * 100, 1) + "%</td>" +
              "</tr>\n");
   aHTML.push("<tr>" +
-             "<td>30 seconds - 2 minutes</td>" +
+             "<td><!-- 6 -->" + Lang("30 seconds - 2 minutes") + "</td>" +
              "<td>" + NumberFormat(aData.s30s2mn, 0) + "</td>" +
              "<td>" + NumberFormat(SafeDivide(aData.s30s2mn, iTotalFreq) * 100, 1) + "%</td>" +
              "</tr>\n");
   aHTML.push("<tr>" +
-             "<td>2 minutes - 5 minutes</td>" +
+             "<td><!-- 5 -->" + Lang("2 minutes - 5 minutes") + "</td>" +
              "<td>" + NumberFormat(aData.s2mn5mn, 0) + "</td>" +
              "<td>" + NumberFormat(SafeDivide(aData.s2mn5mn, iTotalFreq) * 100, 1) + "%</td>" +
              "</tr>\n");
   aHTML.push("<tr>" +
-             "<td>5 minutes - 15 minutes</td>" +
+             "<td><!-- 4 -->" + Lang("5 minutes - 15 minutes") + "</td>" +
              "<td>" + NumberFormat(aData.s5mn15mn, 0) + "</td>" +
              "<td>" + NumberFormat(SafeDivide(aData.s5mn15mn, iTotalFreq) * 100, 1) + "%</td>" +
              "</tr>\n");
   aHTML.push("<tr>" +
-             "<td>15 minutes - 30 minutes</td>" +
+             "<td><!-- 3 -->" + Lang("15 minutes - 30 minutes") + "</td>" +
              "<td>" + NumberFormat(aData.s15mn30mn, 0) + "</td>" +
              "<td>" + NumberFormat(SafeDivide(aData.s15mn30mn, iTotalFreq) * 100, 1) + "%</td>" +
              "</tr>\n");
   aHTML.push("<tr>" +
-             "<td>30 minutes - 1 hour</td>" +
+             "<td><!-- 2 -->" + Lang("30 minutes - 1 hour") + "</td>" +
              "<td>" + NumberFormat(aData.s30mn1h, 0) + "</td>" +
              "<td>" + NumberFormat(SafeDivide(aData.s30mn1h, iTotalFreq) * 100, 1) + "%</td>" +
              "</tr>\n");
   aHTML.push("<tr>" +
-             "<td>More than 1 hour</td>" +
+             "<td><!-- 1 -->" + Lang("More than 1 hour") + "</td>" +
              "<td>" + NumberFormat(aData.s1h, 0) + "</td>" +
              "<td>" + NumberFormat(SafeDivide(aData.s1h, iTotalFreq) * 100, 1) + "%</td>" +
              "</tr>\n");
@@ -1564,13 +1538,13 @@ function DrawTable_Status() {
   // create header
   var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
               "<thead><tr>" +
-              "<th>Code</th>" +
-              "<th>Description</th>" +
-              "<th>Hits</th>" +
+              "<th>" + Lang("Code") + "</th>" +
+              "<th>" + Lang("Description") + "</th>" +
+              "<th>" + Lang("Hits") + "</th>" +
               "<th>&nbsp;</th>" +
-		          "<th>Bandwidth</th>" +
+		          "<th>" + Lang("Bandwidth") + "</th>" +
 		          "<th>&nbsp;</th>" +
-		          "<th class=\"noborder\">Avg&nbsp;Size</th>" +
+		          "<th class=\"noborder\">" + Lang("Average Size") + "</th>" +
               "</tr></thead>\n" +
               "<tbody>";
 
@@ -1579,7 +1553,7 @@ function DrawTable_Status() {
   for (var iRow in aData) {
     aHTML.push("<tr>" +
                "<td>" + oStatistics.oStatus.aData[iRow].sCode + "</td>" +
-               "<td>" + oStatistics.oStatus.aData[iRow].sDescription + "</td>" +
+               "<td>" + Lang(oStatistics.oStatus.aData[iRow].sDescription) + "</td>" +
                "<td class=\"right\">" + NumberFormat(oStatistics.oStatus.aData[iRow].iHits, 0) + "</td>" +
                "<td class=\"right\">" + ((oStatistics.oStatus.aData[iRow].iHits / iTotalHits) * 100).toFixed(1) + "%</td>" +
                "<td class=\"right\">" + DisplayBandwidth(oStatistics.oStatus.aData[iRow].iBW) + "</td>" +
@@ -1592,7 +1566,7 @@ function DrawTable_Status() {
   if (aHTML.length > 0) {
     return ( [ true, (sHTML + aHTML.join("\n") + "</tbody></table>") ] );
   } else {
-    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"7\">There is no data to display</td></tr></tbody></table>") ] );
+    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"7\">" + Lang("There is no data to display") + "</td></tr></tbody></table>") ] );
   }
 }
 
@@ -1604,9 +1578,9 @@ function DrawTable_Status404() {
   // create header
   var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
               "<thead><tr>" +
-              "<th>URL</th>" +
-              "<th>Hits</th>" +
-              "<th>Referrer</th>" +
+              "<th>" + Lang("URL") + "</th>" +
+              "<th>" + Lang("Hits") + "</th>" +
+              "<th>" + Lang("Referrer") + "</th>" +
               "</tr></thead>\n" +
               "<tbody>";
 
@@ -1630,7 +1604,7 @@ function DrawTable_Status404() {
   if (aHTML.length > 0) {
     return ( [ true, (sHTML + aHTML.join("\n") + "</tbody></table>") ] );
   } else {
-    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"3\">There is no data to display</td></tr></tbody></table>") ] );
+    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"3\">" + Lang("There is no data to display") + "</td></tr></tbody></table>") ] );
   }
 }
 
@@ -1645,15 +1619,15 @@ function DrawTable_ThisMonth() {
   // create header
   var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
               "<thead><tr>" +
-              "<th width=\"15%\">Day</th>" +
-              "<th width=\"14%\">Date</th>" +
-              "<th width=\"9%\">Visits</th>" +
-              "<th width=\"9%\" class=\"noborder\">Pages</th>" +
-              "<th width=\"11%\">per&nbsp;Visit</th>" +
-              "<th width=\"9%\" class=\"noborder\">Hits</th>" +
-              "<th width=\"11%\">per&nbsp;Visit</th>" +
-              "<th width=\"9%\" class=\"noborder\">BW</th>" +
-			        "<th width=\"11%\" class=\"noborder\">per&nbsp;Visit</th>" +
+              "<th width=\"15%\">" + Lang("Day") + "</th>" +
+              "<th width=\"14%\">" + Lang("Date") + "</th>" +
+              "<th width=\"9%\">" + Lang("Visits") + "</th>" +
+              "<th width=\"9%\" class=\"noborder\">" + Lang("Pages") + "</th>" +
+              "<th width=\"11%\">" + Lang("per Visit") + "</th>" +
+              "<th width=\"9%\" class=\"noborder\">" + Lang("Hits") + "</th>" +
+              "<th width=\"11%\">" + Lang("per Visit") + "</th>" +
+              "<th width=\"9%\" class=\"noborder\">" + Lang("BW") + "</th>" +
+			        "<th width=\"11%\" class=\"noborder\">" + Lang("per Visit") + "</th>" +
               "</tr></thead>\n" +
               "<tbody>";
 
@@ -1662,7 +1636,7 @@ function DrawTable_ThisMonth() {
   for (var iRow in aData) {
     oRow = oStatistics.oThisMonth.aData[iRow];
 	  sVisibleDate = (oRow.dtDate.getDate() + " " +
-	                  gc_aMonthName[oRow.dtDate.getMonth()].substr(0,3) + " '" +
+	                  Lang(gc_aMonthName[oRow.dtDate.getMonth()].substr(0,3)) + " '" +
 	                  oRow.dtDate.getFullYear().toString().substr(2));
 	  if (oRow.dtDate.getDay() == 0) {
 	    sRowStyle = " class=\"sunday\"";
@@ -1672,7 +1646,7 @@ function DrawTable_ThisMonth() {
 	    sRowStyle = "";
 	  }
     aHTML.push("<tr" + sRowStyle + ">" +
-               "<td><span class=\"hidden\">" + oRow.dtDate.getDay() + "</span>" + gc_aDayName[oRow.dtDate.getDay()] + "</td>" +
+               "<td><span class=\"hidden\">" + oRow.dtDate.getDay() + "</span>" + Lang(gc_aDayName[oRow.dtDate.getDay()]) + "</td>" +
                "<td><span class=\"hidden\">" + oRow.dtDate.valueOf() + "</span>" + sVisibleDate + "</td>" +
                "<td class=\"right\">" + NumberFormat(oRow.iVisits, 0) + "</td>" +
                "<td class=\"right\">" + NumberFormat(oRow.iPages, 0) + "</td>" +
@@ -1697,7 +1671,7 @@ function DrawTable_ThisMonth() {
              "</tr></tfoot></table>")
     return ( [ true, sHTML ] );
   } else {
-    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"10\">There is no data to display</td></tr></tbody></table>") ] );
+    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"10\">" + Lang("There is no data to display") + "</td></tr></tbody></table>") ] );
   }
 }
 
@@ -1713,19 +1687,19 @@ function DrawTable_Time() {
   // create header
   var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
               "<thead><tr>" +
-              "<th>Hour</th>" +
-              "<th class=\"noborder\">Pages</th>" +
+              "<th>" + Lang("Hour") + "</th>" +
+              "<th class=\"noborder\">" + Lang("Pages") + "</th>" +
               "<th class=\"noborder right\">%</th>" +
               "<th class=\"right\">+/-</th>" +
-              "<th class=\"noborder\">Hits</th>" +
+              "<th class=\"noborder\">" + Lang("Hits") + "</th>" +
               "<th class=\"noborder right\">%</th>" +
               "<th class=\"right\">+/-</th>" +
-              "<th class=\"noborder\">BW</th>" +
+              "<th class=\"noborder\">" + Lang("BW") + "</th>" +
               "<th class=\"noborder right\">%</th>" +
               "<th class=\"right\">+/-</th>" +
-              "<th width=\"1\"><small>Not&nbsp;Viewed</small><br />Pages</th>" +
-              "<th width=\"1\"><small>Not&nbsp;Viewed</small><br />Hits</th>" +
-              "<th class=\"noborder\" width=\"1\"><small>Not&nbsp;Viewed</small><br />BW</th>" +
+              "<th width=\"1\"><small>" + (Lang("Not Viewed")).replace(" ", "&nbsp;") + "</small><br />" + Lang("Pages") + "</th>" +
+              "<th width=\"1\"><small>" + (Lang("Not Viewed")).replace(" ", "&nbsp;") + "</small><br />" + Lang("Hits") + "</th>" +
+              "<th class=\"noborder\" width=\"1\"><small>" + (Lang("Not Viewed")).replace(" ", "&nbsp;") + "</small><br />" + Lang("BW") + "</th>" +
               "</tr></thead>\n" +
               "<tbody>";
 
@@ -1783,7 +1757,7 @@ function DrawTable_Time() {
              "</tr></tfoot></table>")
     return ( [ true, sHTML ] );
   } else {
-    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"4\">There is no data to display</td></tr></tbody></table>") ] );
+    return ( [ false, (sHTML + "<tr><td class=\"center\" colspan=\"4\">" + Lang("There is no data to display") + "</td></tr></tbody></table>") ] );
   }
 
   function Difference(iValue, iAverage) {
@@ -1797,6 +1771,10 @@ function DrawTable_Time() {
       }
     }
   }
+}
+
+function Lang(sPhrase) {
+  return (oTranslation[sPhrase] || sPhrase);
 }
 
 function Misc_ThisMonthCalendar(sHeadline, sSubMenu, sDataItem) {
@@ -1819,21 +1797,21 @@ function Misc_ThisMonthCalendar(sHeadline, sSubMenu, sDataItem) {
   var sHTML = "<table class=\"calendar\"><tbody>" +
               "<tr>" +
               "<td class=\"labelTop\">&nbsp;</td>" +
-              "<td class=\"labelTop\">Mo</td>" +
-              "<td class=\"labelTop\">Tu</td>" +
-              "<td class=\"labelTop\">We</td>" +
-              "<td class=\"labelTop\">Th</td>" +
-              "<td class=\"labelTop\">Fr</td>" +
-              "<td class=\"labelTop\">Sa</td>" +
-              "<td class=\"labelTop\">Su</td>" +
+              "<td class=\"labelTop\">" + Lang("Monday") + "</td>" +
+              "<td class=\"labelTop\">" + Lang("Tuesday") + "</td>" +
+              "<td class=\"labelTop\">" + Lang("Wednesday") + "</td>" +
+              "<td class=\"labelTop\">" + Lang("Thursday") + "</td>" +
+              "<td class=\"labelTop\">" + Lang("Friday") + "</td>" +
+              "<td class=\"labelTop\">" + Lang("Saturday") + "</td>" +
+              "<td class=\"labelTop\">" + Lang("Sunday") + "</td>" +
               "<td class=\"labelTopSpacer\">&nbsp;</td>" +
-              "<td class=\"labelTop\">Week&nbsp;Total</td>" +
-              "<td class=\"labelTop\">Daily&nbsp;Avg</td>" +
+              "<td class=\"labelTop\">" + Lang("Week Total") + "</td>" +
+              "<td class=\"labelTop\">" + Lang("Daily Average") + "</td>" +
               "</tr>";
   for (var iIndex = iFirstWeek; iIndex <= iLastWeek; iIndex++) {
     aWeek[iIndex] = { iCount:0, iTotal:0 };
     sHTML += "<tr>" +
-             "<td id=\"calWeek" + iIndex + "\" class=\"labelSide\">Wk&nbsp;" + iIndex + "</td>" +
+             "<td id=\"calWeek" + iIndex + "\" class=\"labelSide\">" + Lang("Week") + ":&nbsp;" + iIndex + "</td>" +
              "<td id=\"calDay1-" + iIndex + "\">&nbsp;</td>" +
              "<td id=\"calDay2-" + iIndex + "\">&nbsp;</td>" +
              "<td id=\"calDay3-" + iIndex + "\">&nbsp;</td>" +
@@ -1851,7 +1829,7 @@ function Misc_ThisMonthCalendar(sHeadline, sSubMenu, sDataItem) {
            "<td colspan=\"7\" id=\"graph\" class=\"calGraph\">&nbsp;</td>" +
            "<td colspan=\"3\">&nbsp;</td>" +
            "</tr><tr>" +
-           "<td class=\"labelSide\">Day&nbsp;of&nbsp;Week Total</td>" +
+           "<td class=\"labelSide\">" + Lang("Day of Week Total") + "</td>" +
            "<td id=\"calTotDay1\" class=\"calTotDay\">&nbsp;</td>" +
            "<td id=\"calTotDay2\" class=\"calTotDay\">&nbsp;</td>" +
            "<td id=\"calTotDay3\" class=\"calTotDay\">&nbsp;</td>" +
@@ -1862,7 +1840,7 @@ function Misc_ThisMonthCalendar(sHeadline, sSubMenu, sDataItem) {
            "<td>&nbsp;</td>" +
            "<td colspan=\"2\" id=\"calTotMonth\" class=\"calTotDay\">&nbsp;</td>" +
            "</tr><tr>" +
-           "<td class=\"labelSide\">Day&nbsp;of&nbsp;Week Avg</td>" +
+           "<td class=\"labelSide\">" + Lang("Day of Week Average") + "</td>" +
            "<td id=\"calAvgDay1\" class=\"calAvgDay\">&nbsp;</td>" +
            "<td id=\"calAvgDay2\" class=\"calAvgDay\">&nbsp;</td>" +
            "<td id=\"calAvgDay3\" class=\"calAvgDay\">&nbsp;</td>" +
@@ -1876,7 +1854,7 @@ function Misc_ThisMonthCalendar(sHeadline, sSubMenu, sDataItem) {
   sHTML += "</tbody></table>";
 
   // apply content
-  $("#content").html("<h2>" + sHeadline + "</h2>" +
+  $("#content").html("<h2>" + Lang(sHeadline) + "</h2>" +
                      DrawSubMenu("thismonth", sSubMenu) +
                      "<div class=\"tableFull\">" + sHTML + "</div>");
 
@@ -1937,15 +1915,15 @@ function Misc_ThisMonthCalendar(sHeadline, sSubMenu, sDataItem) {
 
   // populate month totals
   if (sDataItem == "iBW") {
-    $("#calTotMonth").html("<div><span>Total:</span> " + DisplayBandwidth(iTotal) + "</div>");
-    $("#calAvgMonth").html("<div><span>Avg:</span> " + DisplayBandwidth(iTotal / oRow.dtDate.getDate()) + "</div>");
+    $("#calTotMonth").html("<div><span>" + Lang("Total") + ":</span> " + DisplayBandwidth(iTotal) + "</div>");
+    $("#calAvgMonth").html("<div><span>" + Lang("Average") + ":</span> " + DisplayBandwidth(iTotal / oRow.dtDate.getDate()) + "</div>");
   } else {
-    $("#calTotMonth").html("<div><span>Total:</span> " + NumberFormat(iTotal, 0) + "</div>");
-    $("#calAvgMonth").html("<div><span>Avg:</span> " + NumberFormat((iTotal / oRow.dtDate.getDate()), 1) + "</div>");
+    $("#calTotMonth").html("<div><span>" + Lang("Total") + ":</span> " + NumberFormat(iTotal, 0) + "</div>");
+    $("#calAvgMonth").html("<div><span>" + Lang("Average") + ":</span> " + NumberFormat((iTotal / oRow.dtDate.getDate()), 1) + "</div>");
   }
 
   // draw graph
-  var aGraphItem = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+  var aGraphItem = [Lang("Monday"), Lang("Tuesday"), Lang("Wednesday"), Lang("Thursday"), Lang("Friday"), Lang("Saturday"), Lang("Sunday")];
   var aGraphValue = [SafeDivide(aDay[1].iTotal, aDay[1].iCount),
                      SafeDivide(aDay[2].iTotal, aDay[2].iCount),
                      SafeDivide(aDay[3].iTotal, aDay[3].iCount),
@@ -1960,13 +1938,13 @@ function PageLayout_AllMonths(sPage) {
   var aTable = DrawTable_AllMonths(sPage);
   switch (sPage) {
     case "all":
-      var sHTML = "<h2>Monthly Breakdown</h2>" +
-                  DrawSubMenu("allmonths", "Monthly Breakdown") +
+      var sHTML = "<h2>" + Lang("Visitors each Month") + "</h2>" +
+                  DrawSubMenu("allmonths", "Visitors each Month") +
                   "<div id=\"graph\" class=\"graph\">&nbsp;</div>";
       break;
     case "year":
-      var sHTML = "<h2>Yearly Breakdown</h2>" +
-                  DrawSubMenu("allmonths", "Yearly Breakdown");
+      var sHTML = "<h2>" + Lang("Visitors each Year") + "</h2>" +
+                  DrawSubMenu("allmonths", "Visitors each Year");
       break;
   }
   sHTML += "<div class=\"tableFull\">" + aTable[1] + "</div>";
@@ -1984,17 +1962,17 @@ function PageLayout_Browser(sPage) {
   var aTable = DrawTable_Browser(sPage);
   switch (sPage) {
     case "family":
-      var sHTML = "<h2>Browser Families</h2>" +
+      var sHTML = "<h2>" + Lang("Browser Families") + "</h2>" +
                   DrawSubMenu("browser", "Browser Families") +
                   "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
       break;
     case "all":
-      var sHTML = "<h2>Browser</h2>" +
+      var sHTML = "<h2>" + Lang("All Browsers") + "</h2>" +
                   DrawSubMenu("browser", "All Browsers") +
                   "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
       break;
     default:
-      var sHTML = "<h2>Browser: " + gc_aBrowserFamilyCaption[sPage] + "</h2>" +
+      var sHTML = "<h2>" + Lang("Browser Family") + ": " + gc_aBrowserFamilyCaption[sPage] + "</h2>" +
                   DrawSubMenu("browser", "") +
                   "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
   }
@@ -2010,7 +1988,7 @@ function PageLayout_Country(sPage) {
   switch (sPage) {
     case "all":
       var aTable = DrawTable_Country();
-      var sHTML = "<h2>Visitors by Country</h2>" +
+      var sHTML = "<h2>" + Lang("Visitors by Country") + "</h2>" +
                   DrawSubMenu("country", "Countries") +
                   "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" +
                   aTable[1] +
@@ -2022,7 +2000,7 @@ function PageLayout_Country(sPage) {
       DrawPie_Country();
       break;
     case "continent":
-      var sHTML = "<h2>Visitors by Continent</h2>" +
+      var sHTML = "<h2>" + Lang("Visitors by Continent") + "</h2>" +
                   DrawSubMenu("country", "Continents") +
                   "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" +
                   DrawTable_CountryContinent() +
@@ -2033,9 +2011,9 @@ function PageLayout_Country(sPage) {
       break;
     default:
       if (sPage == "Other") {
-        var sHTML = "<h2>Other Visitors</h2>";
+        var sHTML = "<h2>" + Lang("Other Visitors") + "</h2>";
       } else {
-        var sHTML = "<h2>Visitors from " + sPage + "</h2>";
+        var sHTML = "<h2>" + Lang("Visitors from " + sPage) + "</h2>";
       }
       var aTable = DrawTable_Country(sPage);
       sHTML += DrawSubMenu("country", sPage) +
@@ -2053,7 +2031,7 @@ function PageLayout_Country(sPage) {
 
 function PageLayout_Filetypes() {
   var aTable = DrawTable_Filetypes();
-  var sHTML = "<h2>Filetypes</h2><div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
+  var sHTML = "<h2>" + Lang("Filetypes") + "</h2><div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
   $("#content").html(sHTML);
   if (aTable[0] == true) {
     $(".tablesorter").tablesorter({ headers: { 2:{sorter:"commaNumber"}, 3: { sorter: false }, 4:{sorter:'bandwidth'}, 5: { sorter: false }, 6:{sorter:'bandwidth'} }, sortList: [[2,1]],textExtraction:function(node){return node.innerHTML.replace(',', '');}, widgets: ['zebra'] });
@@ -2062,75 +2040,21 @@ function PageLayout_Filetypes() {
   $("#content").fadeIn(g_iFadeSpeed);
 }
 
-function PageLayout_Keyphrases(sPage) {
-  var aTable = DrawTable_Keyphrases(sPage);
-  switch (sPage) {
-    case "top10":
-      var sHTML = "<h2>Keyphrases</h2>" +
-                  DrawSubMenu("keyphrases", "Top 10 Keyphrases") +
-                  "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
-      break;
-    case "point1":
-    var sHTML = "<h2>Keyphrases</h2>" +
-                DrawSubMenu("keyphrases", "Keyphrases: 0.1% popularity and above") +
-                "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
-      break;
-    case "all":
-    var sHTML = "<h2>Keyphrases</h2>" +
-                DrawSubMenu("keyphrases", "All Keyphrases (slow)") +
-                "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
-      break;
-  }
-  $("#content").html(sHTML);
-  if (aTable[0] == true) {
-    $(".tablesorter").tablesorter({ headers: { 1:{sorter:"commaNumber"}, 2: { sorter: false } }, sortList: [[1,1]],textExtraction:function(node){return node.innerHTML.replace(',', '');}, widgets: ['zebra'] });
-  }
-  DrawPie_Keyphrases();
-  $("#content").fadeIn(g_iFadeSpeed);
-}
-
-function PageLayout_Keywords(sPage) {
-  var aTable = DrawTable_Keywords(sPage);
-  switch (sPage) {
-    case "top10":
-      var sHTML = "<h2>Keywords</h2>" +
-                  DrawSubMenu("keywords", "Top 10 Keywords") +
-                  "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
-      break;
-    case "point1":
-      var sHTML = "<h2>Keywords</h2>" +
-                  DrawSubMenu("keywords", "Keywords: 0.1% popularity and above") +
-                  "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
-      break;
-    case "all":
-      var sHTML = "<h2>Keywords</h2>" +
-                  DrawSubMenu("keywords", "All Keywords (slow)") +
-                  "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
-      break;
-  }
-  $("#content").html(sHTML);
-  if (aTable[0] == true) {
-    $(".tablesorter").tablesorter({ headers: { 1:{sorter:"commaNumber"}, 2: { sorter: false } }, sortList: [[1,1]],textExtraction:function(node){return node.innerHTML.replace(',', '');}, widgets: ['zebra'] });
-  }
-  DrawPie_Keywords();
-  $("#content").fadeIn(g_iFadeSpeed);
-}
-
 function PageLayout_OperatingSystems(sPage) {
   var aTable = DrawTable_OperatingSystems(sPage);
   switch (sPage) {
     case "family":
-      var sHTML = "<h2>Operating System Families</h2>" +
-                  DrawSubMenu("os", "OS Families") +
+      var sHTML = "<h2>" + Lang("Operating System Families") + "</h2>" +
+                  DrawSubMenu("os", "Operating System Families") +
                   "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
       break;
     case "all":
-      var sHTML = "<h2>Operating Systems</h2>" +
+      var sHTML = "<h2>" + Lang("Operating Systems") + "</h2>" +
                   DrawSubMenu("os", "All Operating Systems") +
                   "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
       break;
     default:
-      var sHTML = "<h2>Operating System: " + gc_aOSFamilyCaption[sPage] + "</h2>" +
+      var sHTML = "<h2>" + Lang("Operating System Family") + ": " + gc_aOSFamilyCaption[sPage] + "</h2>" +
                   DrawSubMenu("os", "") +
                   "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
   }
@@ -2146,25 +2070,25 @@ function PageLayout_PageRefs(sPage) {
   switch (sPage) {
     case "all":
       var aTable = DrawTable_PageRefs("all");
-      var sHTML = "<h2>Referring Pages</h2>" +
+      var sHTML = "<h2>" + Lang("Referring Pages") + "</h2>" +
                   DrawSubMenu("pagerefs", "All Referrers") +
                   "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
       break;
     case "domains":
       var aTable = DrawTable_PageRefs("domains");
-      var sHTML = "<h2>Referring Domains</h2>" +
+      var sHTML = "<h2>" + Lang("Referring Domains") + "</h2>" +
                   DrawSubMenu("pagerefs", "Referring Domains") +
                   "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
       break;
     case "top10":
       var aTable = DrawTable_PageRefs("top10");
-      var sHTML = "<h2>Referring Pages</h2>" +
+      var sHTML = "<h2>" + Lang("Referring Pages") + "</h2>" +
                   DrawSubMenu("pagerefs", "Top 10 Referrers") +
                   "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
       break;
     case "top50":
       var aTable = DrawTable_PageRefs("top50");
-      var sHTML = "<h2>Referring Pages</h2>" +
+      var sHTML = "<h2>" + Lang("Referring Pages") + "</h2>" +
                   DrawSubMenu("pagerefs", "Top 50 Referrers") +
                   "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
       break;
@@ -2179,7 +2103,7 @@ function PageLayout_PageRefs(sPage) {
 
 function PageLayout_PageRefsSE() {
   var aTable = DrawTable_PageRefsSE();
-  var sHTML = "<h2>Referring Search Engines</h2>" +
+  var sHTML = "<h2>" + Lang("Referring Search Engines") + "</h2>" +
               DrawSubMenu("pagerefs", "Search Engines") +
               "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
   $("#content").html(sHTML);
@@ -2225,7 +2149,7 @@ function PageLayout_Pages(sPage) {
 
   // create html
   var aTable = DrawTable_Pages(aData);
-  var sHTML = "<h2>Page Views</h2>" +
+  var sHTML = "<h2>" + Lang("Page Views") + "</h2>" +
               DrawSubMenu("pages", sSubMenu) +
               "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
   $("#content").html(sHTML);
@@ -2238,7 +2162,7 @@ function PageLayout_Pages(sPage) {
 
 function PageLayout_Robots() {
   var aTable = DrawTable_Robots();
-  var sHTML = "<h2>Visiting Spiders</h2><div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
+  var sHTML = "<h2>" + Lang("Visiting Spiders") + "</h2><div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
   $("#content").html(sHTML);
   if (aTable[0] == true) {
     $(".tablesorter").tablesorter({ headers: { 1:{sorter:"commaNumber"}, 2: { sorter: false }, 3:{sorter:'bandwidth'}, 4: { sorter: false }, 6:{sorter:"commaNumber"}, 7: { sorter: false } }, sortList: [[1,1]],textExtraction:function(node){return node.innerHTML.replace(',', '');}, widgets: ['zebra'] });
@@ -2247,12 +2171,45 @@ function PageLayout_Robots() {
   $("#content").fadeIn(g_iFadeSpeed);
 }
 
+function PageLayout_Searches(sPage) {
+  switch (sPage) {
+    case "keyphrasecloud":
+      var sHTML = "<h2>" + Lang("Keyphrases Tag Cloud") + "</h2>" +
+                  DrawSubMenu("searches", "Keyphrases Tag Cloud") +
+                  "<div class=\"tagcloud\">" + TagCloud("sPhrase", oStatistics.oKeyphrases, 75) + "</div>";
+      $("#content").html(sHTML);
+      break;
+    case "keyphrases":
+      var sHTML = "<h2>" + Lang("Keyphrases") + "</h2>" +
+                  DrawSubMenu("searches", "Keyphrases") +
+                  "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + Paging_Keyphrases() + "</div>";
+      $("#content").html(sHTML);
+      DrawPie_Keyphrases();
+      break;
+    case "keywordcloud":
+      var sHTML = "<h2>" + Lang("Keywords Tag Cloud") + "</h2>" +
+                  DrawSubMenu("searches", "Keywords Tag Cloud") +
+                  "<div class=\"tagcloud\">" + TagCloud("sWord", oStatistics.oKeywords, 150) + "</div>";
+      $("#content").html(sHTML);
+      break;
+    case "keywords":
+      var sHTML = "<h2>" + Lang("Keywords") + "</h2>" +
+                  DrawSubMenu("searches", "Keywords") +
+                  "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + Paging_Keywords() + "</div>";
+      $("#content").html(sHTML);
+      DrawPie_Keywords();
+      break;
+  }
+  $("#content").fadeIn(g_iFadeSpeed);
+}
+
 function PageLayout_Session() {
   var aTable = DrawTable_Session();
-  var sHTML = "<h2>Session Duration</h2><div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
+  var sHTML = "<h2>" + Lang("Session Duration") + "</h2><div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
   $("#content").html(sHTML);
   if (aTable[0] == true) {
-    $(".tablesorter").tablesorter({ headers: { 0: { sorter: false }, 1:{sorter:"commaNumber"}, 2: { sorter: false } }, sortList: [[1,1]],textExtraction:function(node){return node.innerHTML.replace(',', '');}, widgets: ['zebra'] });
+    //$(".tablesorter").tablesorter({ headers: { 0: { sorter: false }, 1:{sorter:"commaNumber"}, 2: { sorter: false } }, sortList: [[1,1]],textExtraction:function(node){return node.innerHTML.replace(',', '');}, widgets: ['zebra'] });
+    $(".tablesorter").tablesorter({ headers: { 1:{sorter:"commaNumber"}, 2: { sorter: false } }, sortList: [[0,1]],textExtraction:function(node){return node.innerHTML.replace(',', '');}, widgets: ['zebra'] });
   }
   DrawPie_Session();
   $("#content").fadeIn(g_iFadeSpeed);
@@ -2262,7 +2219,7 @@ function PageLayout_Status(sPage) {
   switch (sPage) {
     case "404":
       var aTable = DrawTable_Status404();
-      var sHTML = "<h2>HTTP Status Codes: 404s</h2>" +
+      var sHTML = "<h2>" + Lang("HTTP Status Codes") + ": 404s</h2>" +
                   DrawSubMenu("status", "File Not Found URLs") +
                   "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
       $("#content").html(sHTML);
@@ -2273,7 +2230,7 @@ function PageLayout_Status(sPage) {
       break;
     default:
       var aTable = DrawTable_Status();
-      var sHTML = "<h2>HTTP Status Codes</h2>" +
+      var sHTML = "<h2>" + Lang("HTTP Status Codes") + "</h2>" +
                   DrawSubMenu("status", "Status Codes") +
                   "<div id=\"pie\" class=\"pie\">&nbsp;</div><div class=\"tablePie\">" + aTable[1] + "</div>";
       $("#content").html(sHTML);
@@ -2289,7 +2246,7 @@ function PageLayout_ThisMonth(sPage) {
   switch (sPage) {
     case "all":
       var aTable = DrawTable_ThisMonth();
-      var sHTML = "<h2>Visitors this Month</h2>" +
+      var sHTML = "<h2>" + Lang("Visitors this Month") + "</h2>" +
                   DrawSubMenu("thismonth", "Overview") +
                   "<div id=\"graph\" class=\"graph\">&nbsp;</div><div class=\"tableFull\">" + aTable[1] + "</div>";
       $("#content").html(sHTML);
@@ -2316,7 +2273,7 @@ function PageLayout_ThisMonth(sPage) {
 
 function PageLayout_Time(sPage) {
   var aTable = DrawTable_Time(sPage);
-  var sHTML = "<h2>24 Hour Breakdown</h2>" +
+  var sHTML = "<h2>" + Lang("Visitors over 24 Hours") + "</h2>" +
               "<div id=\"graph\" class=\"graph\">&nbsp;</div>" +
               "<div class=\"tableFull\">" + aTable[1] + "</div>";
   $("#content").html(sHTML);
@@ -2325,6 +2282,247 @@ function PageLayout_Time(sPage) {
   }
   DrawGraph_Time();
   $("#content").fadeIn(g_iFadeSpeed);
+}
+
+function PagingInputNumber(oEvent, oInput, sType) {
+  var iCode = (oEvent.charCode || oEvent.keyCode);
+  if (iCode == 13) {
+    var iValue = parseFloat($(oInput).val());
+    if (isNaN(iValue) == true) { return false; }
+    if (iValue < 1) { return false; }
+    if (iValue != Math.round(iValue)) { return false; }
+    switch (sType) {
+      case "keyphrases":
+        if (iValue > (Math.floor((oStatistics.oKeyphrases.aData.length - 1) / oPaging.oKeyphrases.iRowsPerPage) + 1)) { return false; }
+        RedrawTable_Keyphrases("iCurrPage", (iValue - 1));
+        break;
+      case "keywords":
+        if (iValue > (Math.floor((oStatistics.oKeywords.aData.length - 1) / oPaging.oKeywords.iRowsPerPage) + 1)) { return false; }
+        RedrawTable_Keywords("iCurrPage", (iValue - 1));
+        break;
+    }
+  }
+  if ((iCode == 8) || (iCode == 9) || ((iCode > 34) && (iCode < 38)) || (iCode == 39) || (iCode == 46) || ((iCode > 47) && (iCode < 58))) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+function Paging_Keyphrases() {
+  // get values
+  iTotalFreq = oStatistics.oKeyphrases.iTotalFreq;
+  switch (oPaging.oKeyphrases.sSort) {
+    case "freqASC":
+      var sKeyphraseClass = "";
+      var sFrequencyClass = " headerSortDown";
+      var sKeyphraseSort = "wordDESC";
+      var sFrequencySort = "freqDESC";
+      var aData = oStatistics.oKeyphrases.aData;
+      var iDisplayOrder = -1;
+      break;
+    case "freqDESC":
+      var sKeyphraseClass = "";
+      var sFrequencyClass = " headerSortUp";
+      var sKeyphraseSort = "wordDESC";
+      var sFrequencySort = "freqASC";
+      var aData = oStatistics.oKeyphrases.aData;
+      var iDisplayOrder = 1;
+      break;
+    case "wordASC":
+      var sKeyphraseClass = " headerSortDown";
+      var sFrequencyClass = "";
+      var sKeyphraseSort = "wordDESC";
+      var sFrequencySort = "freqDESC";
+      var aData = oStatistics.oKeyphrasesAlphabetical.aData;
+      var iDisplayOrder = -1;
+      break;
+    case "wordDESC":
+      var sKeyphraseClass = " headerSortUp";
+      var sFrequencyClass = "";
+      var sKeyphraseSort = "wordASC";
+      var sFrequencySort = "freqDESC";
+      var aData = oStatistics.oKeyphrasesAlphabetical.aData;
+      var iDisplayOrder = 1;
+      break;
+  }
+
+  // create header
+  var sDesc = (Lang("Showing [START] to [END] of [TOTAL] keyphrases")).replace("[TOTAL]", aData.length);
+  var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
+              "<thead><tr>" +
+              "<th class=\"header" + sKeyphraseClass + "\" onclick=\"RedrawTable_Keyphrases('sSort', '" + sKeyphraseSort + "')\" width=\"80%\">" + Lang("Keyphrase") + "</th>" +
+              "<th class=\"header" + sFrequencyClass + "\" onclick=\"RedrawTable_Keyphrases('sSort', '" + sFrequencySort + "')\" width=\"10%\">" + Lang("Frequency") + "</th>" +
+              "<th class=\"noborder\" width=\"10%\">&nbsp;</th>" +
+              "</tr></thead>\n" +
+              "<tbody>";
+
+  // create table body
+  aHTML = new Array();
+  if (iDisplayOrder == 1) {
+    var iStart = (oPaging.oKeyphrases.iCurrPage * oPaging.oKeyphrases.iRowsPerPage);
+    var iEnd = (iStart + oPaging.oKeyphrases.iRowsPerPage);
+    if (iEnd > aData.length) {
+      iEnd = aData.length;
+    }
+    sDesc = sDesc.replace("[START]", iStart + 1).replace("[END]", iEnd);
+    for (var i = iStart; i < iEnd; i++) {
+      aHTML.push(((i % 2 == 0) ? "<tr>" : "<tr class=\"odd\">") +
+                 "<td>" + aData[i].sPhrase + "</td>" +
+                 "<td class=\"right\">" + NumberFormat(aData[i].iFreq, 0) + "</td>" +
+  			         "<td class=\"noborder right\">" + ((aData[i].iFreq / iTotalFreq) * 100).toFixed(1) + "%</td>" +
+                 "</tr>\n");
+    }
+  } else {
+    if (aData.length > 0) {
+      var iStart = (aData.length - 1) - (oPaging.oKeyphrases.iCurrPage * oPaging.oKeyphrases.iRowsPerPage);
+      var iEnd = (iStart - oPaging.oKeyphrases.iRowsPerPage);
+      if (iEnd < -1) {
+        iEnd = -1;
+      }
+      sDesc = sDesc.replace("[START]", iStart + 1).replace("[END]", iEnd + 2);
+      for (var i = iStart; i > iEnd; i--) {
+        aHTML.push(((i % 2 == 0) ? "<tr>" : "<tr class=\"odd\">") +
+                   "<td>" + aData[i].sPhrase + "</td>" +
+                   "<td class=\"right\">" + NumberFormat(aData[i].iFreq, 0) + "</td>" +
+    			         "<td class=\"noborder right\">" + ((aData[i].iFreq / iTotalFreq) * 100).toFixed(1) + "%</td>" +
+                   "</tr>\n");
+      }
+    }
+  }
+
+  // output
+  if (aHTML.length > 0) {
+    var iMaxPage = Math.floor((aData.length - 1) / oPaging.oKeyphrases.iRowsPerPage);
+    var sNavigation = "<div id=\"paging\"><span>" + sDesc + "</span>";
+    if (oPaging.oKeyphrases.iCurrPage > 0) {
+      sNavigation += "<img src=\"themes/" + sThemeDir + "/paging/first.gif\" onmouseover=\"this.src='themes/" + sThemeDir + "/paging/first_on.gif'\" onmouseout=\"this.src='themes/" + sThemeDir + "/paging/first.gif'\" style=\"cursor: pointer;\" onclick=\"RedrawTable_Keyphrases('iCurrPage', 0)\" />" +
+                     "<img src=\"themes/" + sThemeDir + "/paging/prev.gif\" onmouseover=\"this.src='themes/" + sThemeDir + "/paging/prev_on.gif'\" onmouseout=\"this.src='themes/" + sThemeDir + "/paging/prev.gif'\" style=\"cursor: pointer;\" onclick=\"RedrawTable_Keyphrases('iCurrPage', " + (oPaging.oKeyphrases.iCurrPage - 1) + ")\" />";
+    } else {
+      sNavigation += "<img src=\"themes/" + sThemeDir + "/paging/first_off.gif\" />" +
+                     "<img src=\"themes/" + sThemeDir + "/paging/prev_off.gif\" />";
+    }
+    sNavigation += "<span><input type=\"text\" value=\"" + (oPaging.oKeyphrases.iCurrPage + 1) + "\" onkeypress=\"return PagingInputNumber(event, this, 'keyphrases');\" />" + " / " + (iMaxPage + 1) + "</span>";
+    if (oPaging.oKeyphrases.iCurrPage < iMaxPage) {
+      sNavigation += "<img src=\"themes/" + sThemeDir + "/paging/next.gif\" onmouseover=\"this.src='themes/" + sThemeDir + "/paging/next_on.gif'\" onmouseout=\"this.src='themes/" + sThemeDir + "/paging/next.gif'\" style=\"cursor: pointer;\" onclick=\"RedrawTable_Keyphrases('iCurrPage', " + (oPaging.oKeyphrases.iCurrPage + 1) + ")\" />" +
+                     "<img src=\"themes/" + sThemeDir + "/paging/last.gif\" onmouseover=\"this.src='themes/" + sThemeDir + "/paging/last_on.gif'\" onmouseout=\"this.src='themes/" + sThemeDir + "/paging/last.gif'\" style=\"cursor: pointer;\" onclick=\"RedrawTable_Keyphrases('iCurrPage', " + iMaxPage + ")\" />";
+    } else {
+      sNavigation += "<img src=\"themes/" + sThemeDir + "/paging/next_off.gif\" />" +
+                     "<img src=\"themes/" + sThemeDir + "/paging/last_off.gif\" />";
+    }
+    sNavigation += "</div>";
+    return (sHTML + aHTML.join("\n") + "</tbody></table>" + sNavigation);
+  } else {
+    return (sHTML + "<tr><td class=\"center\" colspan=\"3\">" + Lang("There is no data to display") + "</td></tr></tbody></table>");
+  }
+}
+
+function Paging_Keywords() {
+  // get values
+  iTotalFreq = oStatistics.oKeywords.iTotalFreq;
+  switch (oPaging.oKeywords.sSort) {
+    case "freqASC":
+      var sKeywordClass = "";
+      var sFrequencyClass = " headerSortDown";
+      var sKeywordSort = "wordDESC";
+      var sFrequencySort = "freqDESC";
+      var aData = oStatistics.oKeywords.aData;
+      var iDisplayOrder = -1;
+      break;
+    case "freqDESC":
+      var sKeywordClass = "";
+      var sFrequencyClass = " headerSortUp";
+      var sKeywordSort = "wordDESC";
+      var sFrequencySort = "freqASC";
+      var aData = oStatistics.oKeywords.aData;
+      var iDisplayOrder = 1;
+      break;
+    case "wordASC":
+      var sKeywordClass = " headerSortDown";
+      var sFrequencyClass = "";
+      var sKeywordSort = "wordDESC";
+      var sFrequencySort = "freqDESC";
+      var aData = oStatistics.oKeywordsAlphabetical.aData;
+      var iDisplayOrder = -1;
+      break;
+    case "wordDESC":
+      var sKeywordClass = " headerSortUp";
+      var sFrequencyClass = "";
+      var sKeywordSort = "wordASC";
+      var sFrequencySort = "freqDESC";
+      var aData = oStatistics.oKeywordsAlphabetical.aData;
+      var iDisplayOrder = 1;
+      break;
+  }
+
+  // create header
+  var sDesc = (Lang("Showing [START] to [END] of [TOTAL] keywords")).replace("[TOTAL]", aData.length);
+  var sHTML = "<table class=\"tablesorter\" cellspacing=\"0\">\n" +
+              "<thead><tr>" +
+              "<th class=\"header" + sKeywordClass + "\" onclick=\"RedrawTable_Keywords('sSort', '" + sKeywordSort + "')\" width=\"80%\">" + Lang("Keyword") + "</th>" +
+              "<th class=\"header" + sFrequencyClass + "\" onclick=\"RedrawTable_Keywords('sSort', '" + sFrequencySort + "')\" width=\"10%\">" + Lang("Frequency") + "</th>" +
+              "<th class=\"noborder\" width=\"10%\">&nbsp;</th>" +
+              "</tr></thead>\n" +
+              "<tbody>";
+
+  // create table body
+  aHTML = new Array();
+  if (iDisplayOrder == 1) {
+    var iStart = (oPaging.oKeywords.iCurrPage * oPaging.oKeywords.iRowsPerPage);
+    var iEnd = (iStart + oPaging.oKeywords.iRowsPerPage);
+    if (iEnd > aData.length) {
+      iEnd = aData.length;
+    }
+    sDesc = sDesc.replace("[START]", iStart + 1).replace("[END]", iEnd);
+    for (var i = iStart; i < iEnd; i++) {
+      aHTML.push(((i % 2 == 0) ? "<tr>" : "<tr class=\"odd\">") +
+                 "<td>" + aData[i].sWord + "</td>" +
+                 "<td class=\"right\">" + NumberFormat(aData[i].iFreq, 0) + "</td>" +
+  			         "<td class=\"noborder right\">" + ((aData[i].iFreq / iTotalFreq) * 100).toFixed(1) + "%</td>" +
+                 "</tr>\n");
+    }
+  } else {
+    if (aData.length > 0) {
+      var iStart = (aData.length - 1) - (oPaging.oKeywords.iCurrPage * oPaging.oKeywords.iRowsPerPage);
+      var iEnd = (iStart - oPaging.oKeywords.iRowsPerPage);
+      if (iEnd < -1) {
+        iEnd = -1;
+      }
+      sDesc = sDesc.replace("[START]", iStart + 1).replace("[END]", iEnd + 2);
+      for (var i = iStart; i > iEnd; i--) {
+        aHTML.push(((i % 2 == 0) ? "<tr>" : "<tr class=\"odd\">") +
+                   "<td>" + aData[i].sWord + "</td>" +
+                   "<td class=\"right\">" + NumberFormat(aData[i].iFreq, 0) + "</td>" +
+    			         "<td class=\"noborder right\">" + ((aData[i].iFreq / iTotalFreq) * 100).toFixed(1) + "%</td>" +
+                   "</tr>\n");
+      }
+    }
+  }
+
+  // output
+  if (aHTML.length > 0) {
+    var iMaxPage = Math.floor((aData.length - 1) / oPaging.oKeywords.iRowsPerPage);
+    var sNavigation = "<div id=\"paging\"><span>" + sDesc + "</span>";
+    if (oPaging.oKeywords.iCurrPage > 0) {
+      sNavigation += "<img src=\"themes/" + sThemeDir + "/paging/first.gif\" onmouseover=\"this.src='themes/" + sThemeDir + "/paging/first_on.gif'\" onmouseout=\"this.src='themes/" + sThemeDir + "/paging/first.gif'\" style=\"cursor: pointer;\" onclick=\"RedrawTable_Keywords('iCurrPage', 0)\" />" +
+                     "<img src=\"themes/" + sThemeDir + "/paging/prev.gif\" onmouseover=\"this.src='themes/" + sThemeDir + "/paging/prev_on.gif'\" onmouseout=\"this.src='themes/" + sThemeDir + "/paging/prev.gif'\" style=\"cursor: pointer;\" onclick=\"RedrawTable_Keywords('iCurrPage', " + (oPaging.oKeywords.iCurrPage - 1) + ")\" />";
+    } else {
+      sNavigation += "<img src=\"themes/" + sThemeDir + "/paging/first_off.gif\" />" +
+                     "<img src=\"themes/" + sThemeDir + "/paging/prev_off.gif\" />";
+    }
+    sNavigation += "<span><input type=\"text\" value=\"" + (oPaging.oKeywords.iCurrPage + 1) + "\" onkeypress=\"return PagingInputNumber(event, this, 'keywords');\" />" + " / " + (iMaxPage + 1) + "</span>";
+    if (oPaging.oKeywords.iCurrPage < iMaxPage) {
+      sNavigation += "<img src=\"themes/" + sThemeDir + "/paging/next.gif\" onmouseover=\"this.src='themes/" + sThemeDir + "/paging/next_on.gif'\" onmouseout=\"this.src='themes/" + sThemeDir + "/paging/next.gif'\" style=\"cursor: pointer;\" onclick=\"RedrawTable_Keywords('iCurrPage', " + (oPaging.oKeywords.iCurrPage + 1) + ")\" />" +
+                     "<img src=\"themes/" + sThemeDir + "/paging/last.gif\" onmouseover=\"this.src='themes/" + sThemeDir + "/paging/last_on.gif'\" onmouseout=\"this.src='themes/" + sThemeDir + "/paging/last.gif'\" style=\"cursor: pointer;\" onclick=\"RedrawTable_Keywords('iCurrPage', " + iMaxPage + ")\" />";
+    } else {
+      sNavigation += "<img src=\"themes/" + sThemeDir + "/paging/next_off.gif\" />" +
+                     "<img src=\"themes/" + sThemeDir + "/paging/last_off.gif\" />";
+    }
+    sNavigation += "</div>";
+    return (sHTML + aHTML.join("\n") + "</tbody></table>" + sNavigation);
+  } else {
+    return (sHTML + "<tr><td class=\"center\" colspan=\"3\">" + Lang("There is no data to display") + "</td></tr></tbody></table>");
+  }
 }
 
 function PopulateData_AllMonths(sPage) {
@@ -2551,7 +2749,8 @@ function PopulateData_Keyphrases(sPage) {
   $("#loading").show();
 
 	// create data objects
-	var oKP = { iTotalFreq:0, aData:[] };
+	var oKP = { iMaxFreq: 0, iTotalFreq:0, aData:[] };
+	var oKPAlpha = { aData:[] };
 
   $.ajax({
     type: "GET",
@@ -2566,15 +2765,21 @@ function PopulateData_Keyphrases(sPage) {
 
         // increment totals
         oKP.iTotalFreq += iFreq;
-
+        if (iFreq > oKP.iMaxFreq) {
+          oKP.iMaxFreq = iFreq;
+        }
         // populate array
         oKP.aData.push({ "sPhrase" : sPhrase,
                          "iFreq"   : iFreq } );
+        oKPAlpha.aData.push({ sWord : sPhrase,
+                              iFreq : iFreq } );
       });
 
       // apply data
       oKP.aData.sort(Sort_Freq);
+      oKPAlpha.aData.sort(Sort_Phrase);
       oStatistics.oKeyphrases = oKP;
+      oStatistics.oKeyphrasesAlphabetical = oKPAlpha;
       $("#loading").hide();
       DrawPage(sPage);
     }
@@ -2585,7 +2790,8 @@ function PopulateData_Keywords(sPage) {
   $("#loading").show();
 
 	// create data objects
-	var oKW = { iTotalFreq:0, aData:[] };
+	var oKW = { iMaxFreq: 0, iTotalFreq:0, aData:[] };
+	var oKWAlpha = { aData:[] };
 
   $.ajax({
     type: "GET",
@@ -2600,15 +2806,22 @@ function PopulateData_Keywords(sPage) {
 
         // increment totals
         oKW.iTotalFreq += iFreq;
+        if (iFreq > oKW.iMaxFreq) {
+          oKW.iMaxFreq = iFreq;
+        }
 
         // populate array
         oKW.aData.push({ sWord : sWord,
                          iFreq : iFreq } );
+        oKWAlpha.aData.push({ sWord : sWord,
+                              iFreq : iFreq } );
       });
 
       // apply data
       oKW.aData.sort(Sort_Freq);
+      oKWAlpha.aData.sort(Sort_Word);
       oStatistics.oKeywords = oKW;
+      oStatistics.oKeywordsAlphabetical = oKWAlpha;
       $("#loading").hide();
       DrawPage(sPage);
     }
@@ -2698,7 +2911,6 @@ function PopulateData_PageRefs(sPage) {
   $("#loading").show();
 
 	// create data objects
-	// var oPR = { "iTotalPages":0, "iTotalHits":0, "aData":[], "aDataDomain":[], "aDataTLD":[] };
 	var oPR = { "iTotalPages":0, "iTotalHits":0, "aData":[], "aDataDomain":[] };
 
   $.ajax({
@@ -2726,9 +2938,10 @@ function PopulateData_PageRefs(sPage) {
         // populate domain array
         var aTemp = sReferrer.split("/");
         var sDomain = (aTemp[0] + "//" + aTemp[2]);
+        var sVisibleDomain = aTemp[2].replace(/^www./, "");
         $bExists = false;
         for (var iRow in oPR.aDataDomain) {
-          if (oPR.aDataDomain[iRow].sURL == sDomain) {
+          if (oPR.aDataDomain[iRow].sVisibleURL == sVisibleDomain) {
             oPR.aDataDomain[iRow].iPages += iPages;
             oPR.aDataDomain[iRow].iHits += iHits;
             $bExists = true;
@@ -2736,9 +2949,10 @@ function PopulateData_PageRefs(sPage) {
           }
         }
         if ($bExists != true) {
-          oPR.aDataDomain.push({ "sURL"   : sDomain,
-                                 "iPages" : iPages,
-                                 "iHits"  : iHits });
+          oPR.aDataDomain.push({ "sURL"          : sDomain,
+                                 "sVisibleURL"   : aTemp[2].replace(/^www./, ""),
+                                 "iPages"        : iPages,
+                                 "iHits"         : iHits });
         }
       });
 
@@ -3120,11 +3334,40 @@ function PopulateData_Time(sPage) {
   });
 }
 
+function RedrawTable_Keyphrases(sParam, sValue) {
+  oPaging.oKeyphrases[sParam] = sValue;
+  $(".tablePie").html(Paging_Keyphrases());
+}
+
+function RedrawTable_Keywords(sParam, sValue) {
+  oPaging.oKeywords[sParam] = sValue;
+  $(".tablePie").html(Paging_Keywords());
+}
+
 function SafeDivide(iFirst, iSecond) {
   if (iSecond != 0) {
     return (iFirst / iSecond);
   } else {
     return 0;
+  }
+}
+
+function ShowTools(sID) {
+  if (arguments.length > 0) {
+    sToolID = sID;
+  }
+
+  // loop through items
+  if ($("#tools .tool:visible").size() > 0) {
+    $("#tools .tool:visible").each(function() {
+      if ($(this).attr("id") == sToolID) {
+        $(this).stop().slideUp(350);
+      } else {
+        $(this).stop().slideUp(350, ShowTools);
+      }
+    });
+  } else {
+    $("#" + sToolID).stop().slideDown(350);
   }
 }
 
@@ -3140,8 +3383,41 @@ function Sort_Pages(a, b) {
   return b.iPages - a.iPages;
 }
 
+function Sort_Phrase(a, b) {
+  return ((a.sPhrase < b.sPhrase) ? -1 : ((a.sPhrase > b.sPhrase) ? 1 : 0));
+}
+
+function Sort_Word(a, b) {
+  return ((a.sWord < b.sWord) ? -1 : ((a.sWord > b.sWord) ? 1 : 0));
+}
+
+function TagCloud(sType, oData, iMaxCount) {
+  // create array of top tags, sorted alpahabetically
+  var aTag = [];
+  var iCount = oData.aData.length;
+  if (iCount > iMaxCount) { iCount = iMaxCount; }
+  for (var i = 0; i < iCount; i++) {
+    aTag.push(oData.aData[i]);
+  }
+  if (sType == "sWord") {
+    aTag.sort(Sort_Word);
+  } else {
+    aTag.sort(Sort_Phrase);
+  }
+
+  // apply sizes
+  aHTML = [];
+  var iMaxSize = 60;
+  var iMinSize = 11;
+  var iDiff = (iMaxSize - iMinSize);
+  for (var i = 0; i < iCount; i++) {
+    var iSize = (Math.round((aTag[i].iFreq / oData.iMaxFreq) * iDiff) + iMinSize);
+    aHTML.push("<span style=\"font-size: " + iSize + "px; line-height: " + Math.round(iSize * 1.35) + "px;\">" + aTag[i][sType] + "</span>");
+  }
+  return aHTML.join("\n");
+}
+
 function UpdateSite() {
-  $.unblockUI();
   $("#loading").show();
   $.ajax({
     type: "POST",
@@ -3151,10 +3427,10 @@ function UpdateSite() {
       switch ($(oXML).find('result:eq(0)').attr("type")) {
         case "bad_password":
           $("#loading").hide();
-          $.blockUI("<table width='100%'><tbody><tr><td><h1 class=\"modal\">The password you entered was incorrect<\/h1><\/td><td onclick='$.unblockUI();' class='fauxlink right'>Close<\/td><\/tr><\/td><\/tr><\/tbody><\/table>");
+          alert( Lang("The password you entered was incorrect.") );
           break;
         case "updated":
-          var sURL = "?config=" + g_sConfig + "&year=" + g_iYear + "&month=" + g_iMonth + "&view=" + g_sCurrentView;
+          var sURL = "?config=" + g_sConfig + "&year=" + g_iYear + "&month=" + g_iMonth + "&view=" + g_sCurrentView + "&lang=" + g_sLanguage;
           self.location.href = sURL;
           break;
         default:
